@@ -30,12 +30,16 @@ const webpackCofig = [
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
-    title: "Awesome Axuaxu Site",
-    description: "A VitePress Site",
+    title: "axuaxu",
+    description: "知识体系，技能树",
     srcDir: "./src",
+
     themeConfig: {
       logo: "./logo.png",
       // https://vitepress.dev/reference/default-theme-config
+      search: {
+        provider: "local",
+      },
       nav: [
         {
           text: "前端基础",
@@ -58,9 +62,11 @@ export default withMermaid(
         },
       ],
 
-      socialLinks: [
-        { icon: "github", link: "https://github.com/vuejs/vitepress" },
-      ],
+      socialLinks: [{ icon: "github", link: "https://github.com/hxh-ly/" }],
+      footer: {
+        message: "Released under the MIT License.",
+        copyright: "Copyright © 2022-present axuaxu",
+      },
     },
   })
 );
