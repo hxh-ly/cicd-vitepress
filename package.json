@@ -1,5 +1,7 @@
 {
   "devDependencies": {
+    "@types/node": "^24.0.13",
+    "http-server": "^14.1.1",
     "mermaid": "^11.8.1",
     "vitepress": "^1.6.3",
     "vitepress-plugin-mermaid": "^2.0.17"

@@ -29,6 +29,7 @@ const webpackCofig = [
 
 export default withMermaid(
   defineConfig({
+    base: process.env.BASE_PATH || "",
     title: "Awesome Axuaxu Site",
     description: "A VitePress Site",
     srcDir: "./src",
