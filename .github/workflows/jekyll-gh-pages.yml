@@ -40,7 +40,7 @@ jobs:
       - name: Build VitePress
         run: npm run docs:build
         env:
-         BASE_PATH:/${{ github.event.repository.name }}/
+         BASE_PATH: /${{ github.event.repository.name }}/
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
