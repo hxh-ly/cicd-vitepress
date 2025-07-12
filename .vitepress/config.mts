@@ -26,7 +26,12 @@ const webpackCofig = [
     link: "front-eng/CICD",
   },
 ];
-
+const reactConfig = [
+  { text: "开始", link: "react/index" },
+  { text: "React原理", link: "react/react-core" },
+  { text: "Mini-React", link: "react/mini-react" },
+  { text: "ReactPlayground", link: "react/playground" },
+];
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
@@ -43,22 +48,22 @@ export default withMermaid(
       nav: [
         {
           text: "前端基础",
-          items: [
-            { text: "Item A", link: "" },
-            { text: "Item A", link: "" },
-          ],
+          items: [{ text: "React", link: "/react" }],
         },
         {
           text: "前端工程化",
           items: webpackCofig,
         },
-        { text: "Examples", link: "/markdown-examples" },
       ],
 
       sidebar: [
         {
           text: "前端工程化",
           items: webpackCofig,
+        },
+        {
+          text: "React",
+          items: reactConfig,
         },
       ],
 
