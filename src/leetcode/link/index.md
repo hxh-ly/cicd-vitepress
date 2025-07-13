@@ -114,7 +114,7 @@ var reverseKGroup = function (head, k) {
   dummy.next = head;
   let p0 = dummy;
 
-//  先记录总个数
+  //  先记录总个数
   let n = 0;
   let coutCur = head;
   while (coutCur) {
@@ -147,5 +147,147 @@ var reverseKGroup = function (head, k) {
 };
 ```
 
-解释：与lc.92的区别在于，每k个为一组进行翻转。
-也就是每做完一组，需要重新更新 p0到这一组翻转后结尾的位置 pre=null
+解释：与 lc.92 的区别在于，每 k 个为一组进行翻转。
+也就是每做完一组，需要重新更新 p0 到这一组翻转后结尾的位置 pre=null
+
+## lc.876. 链表的中间结点
+
+原题：https://leetcode.cn/problems/middle-of-the-linked-list/description/
+
+```js
+/**
+ * Definition for singly-linked list.
+ * function ListNode(val, next) {
+ *     this.val = (val===undefined ? 0 : val)
+ *     this.next = (next===undefined ? null : next)
+ * }
+ */
+/**
+ * @param {ListNode} head
+ * @return {ListNode}
+ */
+var middleNode = function (head) {
+  let slow = head;
+  let fast = head;
+  while (fast && fast.next) {
+    slow = slow.next;
+    fast = fast.next.next;
+  }
+  return slow;
+};
+```
+
+解释：
+原理：slow 走一步，fast 走两步
+如图观察，偶数个数 fast 为空；奇数个数 fast.next 为空，当满足其中一个到时候，slow 的位置就是题目所求中间的位置
+![alt text](img/link_image02.png)
+
+## lc. 141.环形链表
+
+原题：https://leetcode.cn/problems/linked-list-cycle/description/
+
+```js
+let slow = head;
+let fast = head;
+while (fast && fast.next) {
+  slow = slow.next;
+  fast = fast.next.next;
+  if (fast === slow) {
+    return true;
+  }
+}
+return false;
+```
+
+解释：如果有环，快指针一定会套圈慢指针相遇；如果无环，跳出循环结束
+
+## lc.142. 环形链表 II
+
+原题：
+![alt text](./img/link_image03.png)
+
+```js
+let slow = head;
+let fast = head;
+while (fast && fast.next) {
+  slow = slow.next;
+  fast = fast.next.next;
+  if (fast === slow) {
+    while (slow !== head) {
+      slow = slow.next;
+      head = head.next;
+    }
+    return slow;
+  }
+}
+return null;
+```
+
+解释：
+环长 = b + c
+慢指针移动的距离 = a + b
+快指针移动的距离 = a + b + k(b+c)
+快指针移动距离是慢指针的两倍
+推导出
+2(a+b) = a + b + k(b+c)
+a-c = (k-1) (b+c)
+
+这意味着 slow 从相遇点开始和 head 节点继续走，最终会相遇。
+解释如下：head 走 c 步，slow 也 c 步到了入口，head 再走（k-1)(b+c) 也就是环长到达 a,这时候 slow 也套了 k-1 圈。它们在入口相遇
+
+## 143. 重排链表
+
+原题： https://leetcode.cn/problems/reorder-list/
+
+步骤：
+找到中心点，
+翻转后半部分链表，
+循环交替插入 后半部分链表，
+最终得到 L0 -> Ln -> L1 -> Ln-1 -> L2 -> Ln-2
+
+```js
+/**
+ * Definition for singly-linked list.
+ * function ListNode(val, next) {
+ *     this.val = (val===undefined ? 0 : val)
+ *     this.next = (next===undefined ? null : next)
+ * }
+ */
+/**
+ * @param {ListNode} head
+ * @return {void} Do not return anything, modify head in-place instead.
+ */
+var reorderList = function (head) {
+  let mid = middleNode(head);
+  let head2 = reverseList(mid);
+  while (head2.next) {
+    let h1 = head.next;
+    let h2 = head2.next;
+    head.next = head2;
+    head2.next = h1;
+    head = h1;
+    head2 = h2;
+  }
+};
+var middleNode = function (head) {
+  let slow = head;
+  let fast = head;
+  while (fast && fast.next) {
+    slow = slow.next;
+    fast = fast.next.next;
+  }
+  return slow;
+};
+var reverseList = function (head) {
+  let pre = null;
+  let cur = head;
+  while (cur) {
+    let nxt = cur.next;
+    cur.next = pre;
+    pre = cur;
+    cur = nxt;
+  }
+  return pre;
+};
+```
+![链表交换](./img/link_image04.png)
