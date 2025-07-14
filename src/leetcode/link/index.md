@@ -235,7 +235,7 @@ a-c = (k-1) (b+c)
 这意味着 slow 从相遇点开始和 head 节点继续走，最终会相遇。
 解释如下：head 走 c 步，slow 也 c 步到了入口，head 再走（k-1)(b+c) 也就是环长到达 a,这时候 slow 也套了 k-1 圈。它们在入口相遇
 
-## 143. 重排链表
+## lc.143. 重排链表
 
 原题： https://leetcode.cn/problems/reorder-list/
 
@@ -314,7 +314,7 @@ var deleteNode = function (node) {
 解释：题目含义为只要值不一致，就认为这个节点删除了。而真正意义的删除是这个节点的内存不在这条链上。
 所以这里取巧的是直接改掉原来的值。
 
-## 19. 删除链表的倒数第 N 个结点
+## lc.19. 删除链表的倒数第 N 个结点
 
 https://leetcode.cn/problems/remove-nth-node-from-end-of-list/description/
 
@@ -343,7 +343,7 @@ var removeNthFromEnd = function (head, n) {
 
 ![alt text](./img/link_image05.png)
 
-## 83. 删除排序链表中的重复元素
+## lc.83. 删除排序链表中的重复元素
 
 https://leetcode.cn/problems/remove-duplicates-from-sorted-list/
 
@@ -364,7 +364,7 @@ var deleteDuplicates = function (head) {
 };
 ```
 
-## 82. 删除排序链表中的重复元素 II
+## lc.82. 删除排序链表中的重复元素 II
 
 与 83 的区别是有重复的，都不要
 
