@@ -290,4 +290,106 @@ var reverseList = function (head) {
   return pre;
 };
 ```
+
 ![链表交换](./img/link_image04.png)
+
+# 删除链表
+
+## lc.237. 删除链表中的节点
+
+https://leetcode.cn/problems/delete-node-in-a-linked-list/description/
+
+```js
+/**
+ * @param {ListNode} node
+ * @return {void} Do not return anything, modify node in-place instead.
+ */
+var deleteNode = function (node) {
+  let nodeNext = node.next;
+  node.val = nodeNext.val;
+  node.next = nodeNext.next;
+};
+```
+
+解释：题目含义为只要值不一致，就认为这个节点删除了。而真正意义的删除是这个节点的内存不在这条链上。
+所以这里取巧的是直接改掉原来的值。
+
+## 19. 删除链表的倒数第 N 个结点
+
+https://leetcode.cn/problems/remove-nth-node-from-end-of-list/description/
+
+```js
+var removeNthFromEnd = function (head, n) {
+  let dummyNode = new ListNode(); // 如果可能操作到头节点就需要一个dummy指向head，便于返回
+  dummyNode.next = head;
+  let cur = dummyNode;
+  let right = cur;
+  Array(n)
+    .fill(0)
+    .forEach(() => {
+      right = right.next;
+    });
+  let left = cur; // 找到带删除的上一个节点
+  while (right.next) {
+    right = right.next;
+    left = left.next;
+  }
+  left.next = left.next.next;
+  return dummyNode.next;
+};
+```
+
+解释：这里使用快慢指针，right 先走 n 步，在和 left 同时出发，left 从 dummy 出发，right 走到最后一个节点，这时候，left 到位置就是`被删除节点的上一节点`
+
+![alt text](./img/link_image05.png)
+
+## 83. 删除排序链表中的重复元素
+
+https://leetcode.cn/problems/remove-duplicates-from-sorted-list/
+
+```js
+var deleteDuplicates = function (head) {
+  if (!head) {
+    return head;
+  }
+  let cur = head;
+  while (cur.next) {
+    if (cur.next.val === cur.val) {
+      cur.next = cur.next.next;
+    } else {
+      cur = cur.next;
+    }
+  }
+  return head;
+};
+```
+
+## 82. 删除排序链表中的重复元素 II
+
+与 83 的区别是有重复的，都不要
+
+```js
+var deleteDuplicates = function (head) {
+  let dummy = new ListNode();
+  dummy.next = head;
+  let cur = dummy;
+  while (cur.next && cur.next.next) {
+    let val = cur.next.val;
+    if (val === cur.next.next.val) {
+      while (cur.next && cur.next.val === val) {
+        // 第一次是自己和自己对比;下一次是和第一次对比
+        cur.next = cur.next.next;
+      }
+    } else {
+      cur = cur.next;
+    }
+  }
+  return dummy.next;
+};
+```
+
+解释；
+初始化 cur 指向 dummy Node,每次循环的时候 看下一个节点和 下下一个节点
+如果一样，就再套一个循环，不断删除节点。知道没有节点或者遇到的节点值不一样。
+如果不一样，cur 移到下一个节点，直至满足不足 2 个节点。
+![alt text](./img/link_image06.png)
