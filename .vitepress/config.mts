@@ -32,7 +32,10 @@ const reactConfig = [
   { text: "Mini-React", link: "react/mini-react" },
   { text: "ReactPlayground", link: "react/playground" },
 ];
-const leetdCode = [{ text: "链表", link: "leetcode/link/index" }];
+const leetdCode = [
+  { text: "链表", link: "leetcode/link/index" },
+  { text: "二叉树", link: "leetcode/tree/recursion" },
+];
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
@@ -70,10 +73,10 @@ export default withMermaid(
           text: "React",
           items: reactConfig,
         },
-         {
-          text:'算法',
-          items:leetdCode
-         }
+        {
+          text: "算法",
+          items: leetdCode,
+        },
       ],
 
       socialLinks: [{ icon: "github", link: "https://github.com/hxh-ly/" }],
