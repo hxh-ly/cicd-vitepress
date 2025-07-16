@@ -232,3 +232,99 @@ var rightSideView = function (root) {
   return ans;
 };
 ```
+
+## 98.验证二叉搜索树
+
+`二叉搜索树的定义：左边的严格小于中间，中间的严格小于右边`
+
+### 前序的做法：
+
+`先遍历中，再遍历左右`
+将区间传递下去，判断节点值是否在区间里。初始化传递区间为(-oo,+oo)
+![alt text](img/image02.png)
+
+```js
+/**
+ * Definition for a binary tree node.
+ * function TreeNode(val, left, right) {
+ *     this.val = (val===undefined ? 0 : val)
+ *     this.left = (left===undefined ? null : left)
+ *     this.right = (right===undefined ? null : right)
+ * }
+ */
+/**
+ * @param {TreeNode} root
+ * @return {boolean}
+ */
+var isValidBST = function (root) {
+  function f(root, left, right) {
+    if (!root) {
+      return true;
+    }
+    let val = root.val;
+    return (
+      left < val &&
+      val < right &&
+      f(root.left, left, val) &&
+      f(root.right, val, right)
+    );
+  }
+  return f(root, -Infinity, +Infinity);
+};
+```
+
+### 中序的做法：
+
+`先遍历前，在遍历中，最后遍历后`
+中序遍历的规律是最终遍历的数，会按照严格递增的，所以可以每次只保存上一次遍历的值，和当前的值比较大小，看是否满足。
+
+```js
+var isValidBST = function (root) {
+  let pre = -Infinity;
+  function f(root) {
+    if (!root) {
+      return true;
+    }
+    let l = f(root.left);
+    if (!l) {
+      return false;
+    }
+    if (root.val <= pre) {
+      return false;
+    }
+    pre = root.val;
+    return f(root.right);
+  }
+  return f(root);
+};
+```
+
+### 后续遍历
+
+`先遍历左，在遍历右，最后遍历中`
+与前序类似，只是在归的时候返回区间进行判断
+需要注意：空节点返回的是 [+oo,-oo];遇到不满足区间的节点值返回[-oo,+oo];当这个节点满足后，要返回`[Math.min(l_min, x), Math.max(r_max, x)]` 即左边找最小，右边找最大
+![alt text](img/image03.png)
+
+```js
+/**
+ * @param {TreeNode} root
+ * @return {boolean}
+ */
+var isValidBST = function (root) {
+  function f(root) {
+    if (!root) {
+      return [Infinity, -Infinity];
+    }
+    let [l_min, l_max] = f(root.left);
+    let [r_min, r_max] = f(root.right);
+    let x = root.val;
+    if (x <= l_max || x >= r_min) {
+      return [-Infinity, +Infinity];
+    }
+    return [Math.min(l_min, x), Math.max(r_max, x)];
+  }
+  let res = f(root);
+  return Number.isFinite(res[1]);
+};
+```

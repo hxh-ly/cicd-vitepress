@@ -1,3 +1,4 @@
+import test from "node:test";
 import { defineConfig } from "vitepress";
 import { withMermaid } from "vitepress-plugin-mermaid";
 // https://vitepress.dev/reference/site-config
@@ -36,6 +37,7 @@ const leetdCode = [
   { text: "链表", link: "leetcode/link/index" },
   { text: "二叉树", link: "leetcode/tree/recursion" },
 ];
+const backEndConfig = [{ text: "后端", link: "back-end/knowledge" }];
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
@@ -62,8 +64,11 @@ export default withMermaid(
           text: "算法",
           items: leetdCode,
         },
+        {
+          text: "后端",
+          items: backEndConfig,
+        },
       ],
-
       sidebar: [
         {
           text: "前端工程化",
@@ -77,8 +82,11 @@ export default withMermaid(
           text: "算法",
           items: leetdCode,
         },
+        {
+          text: "后端",
+          items: backEndConfig,
+        },
       ],
-
       socialLinks: [{ icon: "github", link: "https://github.com/hxh-ly/" }],
       footer: {
         message: "Released under the MIT License.",
