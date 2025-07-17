@@ -328,3 +328,85 @@ var isValidBST = function (root) {
   return Number.isFinite(res[1]);
 };
 ```
+
+## 236.最近公共祖先
+
+https://leetcode.cn/problems/lowest-common-ancestor-of-a-binary-tree/description/
+![alt text](img/image04.png)
+最近公共祖先的定义为：“对于有根树 T 的两个节点 p、q，最近公共祖先表示为一个节点 x，满足 x 是 p、q 的祖先且 x 的深度尽可能大（一个节点也可以是它自己的祖先）。”
+
+```js
+/**
+ * @param {TreeNode} root
+ * @param {TreeNode} p
+ * @param {TreeNode} q
+ * @return {TreeNode}
+ */
+var lowestCommonAncestor = function (root, p, q) {
+  return f(root, p, q);
+};
+var f = function (root, p, q) {
+  if (!root || root === q || root === p) {
+    return root;
+  }
+  let l = f(root.left, p, q);
+  let r = f(root.right, p, q);
+  if (l && r) {
+    return root;
+  }
+  if (l) {
+    return l;
+  }
+  if (r) {
+    return r;
+  }
+};
+```
+
+解释：分类讨论
+对于某一个节点，
+如果当前节点为【空｜ p ｜ q】,则直接返回
+其他情况 【左右子树都找到 - 返回当前节点】【只有左子树找到 - 递归左子树结果】【只有右子树找到 - 递归右子树结果】【左右都没找到-返回空节点】
+
+## 235.二叉搜索树的最佳公共祖先
+
+```js
+/**
+ * Definition for a binary tree node.
+ * function TreeNode(val) {
+ *     this.val = val;
+ *     this.left = this.right = null;
+ * }
+ */
+
+/**
+ * @param {TreeNode} root
+ * @param {TreeNode} p
+ * @param {TreeNode} q
+ * @return {TreeNode}
+ */
+var lowestCommonAncestor = function (root, p, q) {
+  return f(root, p, q);
+};
+var f = function (root, p, q) {
+  if (p.val < root.val && q.val < root.val) {
+    //console.log('l', root.val)
+    return f(root.left, p, q);
+  }
+  if (p.val > root.val && q.val > root.val) {
+    //console.log('r', root.val)
+    return f(root.right, p, q);
+  }
+  return root;
+};
+```
+
+解释：利用二叉树的性质
+如果 q、p 的值都小当前节点值，则知道他在左子树中
+如果 q、p 的值都大当前节点值，则知道他在右子树中
+如果 q、p 的值在左右子树中，那最佳公共祖先就是当前节点
+
+分类讨论：
+p 和 q 在左子树，返回递归左子树的结果
+p 和 q 在右子树，返回递归右子树的结果
+其他： 【p 和 q 在左右】【当前是 p】【当前是 q】

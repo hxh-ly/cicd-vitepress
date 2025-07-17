@@ -37,7 +37,7 @@ const leetdCode = [
   { text: "链表", link: "leetcode/link/index" },
   { text: "二叉树", link: "leetcode/tree/recursion" },
 ];
-const backEndConfig = [{ text: "后端", link: "back-end/knowledge" }];
+const backEndConfig = [{ text: "后端", link: "back-end/index" }, { text: "redis", link: "back-end/redis" }];
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
