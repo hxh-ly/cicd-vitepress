@@ -410,3 +410,72 @@ var f = function (root, p, q) {
 p 和 q 在左子树，返回递归左子树的结果
 p 和 q 在右子树，返回递归右子树的结果
 其他： 【p 和 q 在左右】【当前是 p】【当前是 q】
+
+# 层序遍历
+## 103.二叉树的锯齿形层序遍历
+
+https://leetcode.cn/problems/binary-tree-zigzag-level-order-traversal/
+
+```js
+var zigzagLevelOrder = function (root) {
+  if (!root) {
+    return [];
+  }
+  let ans = [];
+  let cur = [root];
+  let even = false;
+  while (cur.length) {
+    let val = [];
+    let next = [];
+    cur.forEach((v) => {
+      val.push(v);
+      let node = v;
+      if (node.left) {
+        next.push(node.left);
+      }
+      if (node.right) {
+        next.push(node.right);
+      }
+    });
+    cur = next;
+    ans = ans.concat(
+      even ? [val.reverse().map((v) => v.val)] : [val.map((v) => v.val)]
+    );
+    even = !even;
+  }
+  return ans;
+};
+```
+
+## 513.找树左下角的值
+
+https://leetcode.cn/problems/find-bottom-left-tree-value/description/
+
+```js
+/**
+ * Definition for a binary tree node.
+ * function TreeNode(val, left, right) {
+ *     this.val = (val===undefined ? 0 : val)
+ *     this.left = (left===undefined ? null : left)
+ *     this.right = (right===undefined ? null : right)
+ * }
+ */
+/**
+ * @param {TreeNode} root
+ * @return {number}
+ */
+var findBottomLeftValue = function (root) {
+  let stack = [root];
+  let node;
+  while (stack.length) {
+    node = stack.shift();
+    if (node.right) {
+      stack.push(node.right);
+    }
+    if (node.left) {
+      stack.push(node.left);
+    }
+  }
+  return node.val;
+};
+```
