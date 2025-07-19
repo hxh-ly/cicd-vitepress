@@ -36,6 +36,7 @@ const reactConfig = [
 const leetdCode = [
   { text: "链表", link: "leetcode/link/index" },
   { text: "二叉树", link: "leetcode/tree/recursion" },
+  { text: "回溯", link: "leetcode/backTracking/index" },
 ];
 const backEndConfig = [{ text: "后端", link: "back-end/index" }, { text: "redis", link: "back-end/redis" }];
 export default withMermaid(
