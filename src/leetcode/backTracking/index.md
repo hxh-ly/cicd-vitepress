@@ -9,6 +9,8 @@
 
 回溯问题分类：
 
+## 子集型回溯
+
 - 子集型回溯（选/不选）
   模版 1.回溯三问：当前操作是枚举第 i 个数选/不选；子问题？从下标>=i 的数字中构造子集；下一个子问题？从下标>=i+1 的数字中构造子集
 
@@ -105,3 +107,76 @@ function isOk(path) {
   return true;
 }
 ```
+
+## 组合型回溯
+
+剪枝优化：
+如果 m = path.length, 剩余要选个数为 d = k - m.假设现在从[1,i]里选，i < d，这样的话就选不满。这个分支可以剪枝优化掉。
+![alt text](./img/image02.png)
+
+## lc.77.组合
+
+```js
+/**
+ * @param {number} n
+ * @param {number} k
+ * @return {number[][]}
+ */
+var combine = function (n, k) {
+  let path = [];
+  let ans = [];
+  function f(i) {
+    let d = k - path.length;
+    // 剩余可选少于d，无法选满，剪枝
+    if (i < d) {
+      return;
+    }
+    if (path.length === k) {
+      ans.push([...path]);
+      return;
+    }
+    // 逆序的写法，  判断‘剩余可选少于d，无法选满，剪枝’ 方便写一点。
+    for (let index = i; index > 0; index--) {
+      path.push(index);
+      f(index - 1);
+      path.pop();
+    }
+  }
+  f(n);
+  return ans;
+};
+```
+
+解释： 见注释
+
+## 216. 组合总和 III
+
+找 k 个数 和为 n； 数从 1 ～ 9，不重复。
+
+```js
+function combinationSum3(k, n) {
+  let path = [];
+  let ans = [];
+  function f(i, t) {
+    let d = k - path.length;
+    if (i < d) {
+      return;
+    }
+    if (t < 0 || t > Math.floor(((2 * i - d + 1) * 2) / d)) {
+      return;
+    }
+    if (path.length === k) {
+      ans.push([...path]);
+    }
+    for (let index = i; index > 0; index--) {
+      path.push(index);
+      f(index - 1, t - index);
+      path.pop();
+    }
+  }
+  return f(9, n);
+}
+```
+
+解释：
+剪枝情况：1.个数不够; 2.剩余值太大，也就是 t<0; 3.剩余值太小，也就是 t>0
