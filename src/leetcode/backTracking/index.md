@@ -116,6 +116,8 @@ function isOk(path) {
 
 ## lc.77.组合
 
+way1:
+
 ```js
 /**
  * @param {number} n
@@ -147,11 +149,43 @@ var combine = function (n, k) {
 };
 ```
 
+way2：选与不选
+
+```js
+/* 
+当前操作：选或不选
+下一个子问题：遍历下标<=i,继续选
+同样的，逆序好 剪枝
+ */
+var combine = function (n, k) {
+  let path = [];
+  let ans = [];
+  function f(i) {
+    let d = k - path.length;
+    if (i < d) {
+      return;
+    }
+    if (path.length === k) {
+      ans.push([...path]);
+      return;
+    }
+    f(i - 1);
+    path.push(i);
+    f(i - 1);
+    path.pop();
+  }
+  f(n);
+  return ans;
+};
+```
+
 解释： 见注释
 
 ## 216. 组合总和 III
 
 找 k 个数 和为 n； 数从 1 ～ 9，不重复。
+
+way1:每层都遍历
 
 ```js
 function combinationSum3(k, n) {
@@ -178,5 +212,102 @@ function combinationSum3(k, n) {
 }
 ```
 
+way2: 选与不选
+
+```js
+var combinationSum3 = function (k, n) {
+  let path = [];
+  let ans = [];
+  function f(i, t) {
+    let d = k - path.length;
+    if (i < d) {
+      return;
+    }
+    if (t < 0 || t > Math.floor(((2 * i - d + 1) * d) / 2)) {
+      return;
+    }
+    if (path.length === k) {
+      ans.push([...path]);
+      return;
+    }
+    f(i - 1, t - 0);
+    path.push(i);
+    f(i - 1, t - i);
+    path.pop();
+  }
+  f(9, n);
+  return ans;
+};
+```
+
 解释：
 剪枝情况：1.个数不够; 2.剩余值太大，也就是 t<0; 3.剩余值太小，也就是 t>0
+
+## 22.括号生成
+
+n 对括号，生成所有可能。
+
+way1:
+
+```js
+// 选和不选， 选就等价添加左括号
+var generateParenthesis = function (n) {
+  let m = 2 * n;
+  let ans = [];
+  let path = [];
+  function f(i, open) {
+    if (path.length === m) {
+      ans.push(path.join(""));
+      return;
+    }
+    // 左可选
+    if (open < n) {
+      path.push("(");
+      f(i + 1, open + 1);
+      path.pop();
+    }
+    if (path.length - open < open) {
+      path.push(")");
+      f(i + 1, open);
+      path.pop();
+    }
+    // 右可选
+  }
+  f(0, 0);
+  return ans;
+};
+```
+
+way2：枚举下一个左括号的位置
+用 「枚举选哪个」的思路。
+在从左往右填的过程中，要时刻保证右括号的个数不能超过左括号的个数。
+如果 ✍️ 填了 5 个左括号，2 个右括号，那么至多填 5-2 = 3 个右括号。
+所以枚举（在天亮下一个左括号之前）填入了 0，1，2，3 个右括号，这样就能得到下一个左括号的位置。
+为了方便，代码直接用 balance 表示左右括号之差。这样我们枚举的范围就是[0,balance]
+
+```js
+var generateParenthesis = function (n) {
+     const ans = [];
+    const path = [];
+  // 目前填了i个括号
+  // 这i个括号的左括号个数 - 右括号个数 = balance
+  function dfs(i, balance) {
+    if (path.length === n) {
+      const s = Array(n * 2).fill(")");
+      for (const j of path) {
+        s[j] = "(";
+      }
+      ans.push(s.join(""));
+      return;
+    }
+    for (let right = 0; right <= balance; right++) {
+      //先填right个右括号，然后填1个左括号，记录左括号的下标i+right
+      path.push(i + right);
+      dfs(i + right + 1, balance - right + 1);
+      path.pop();
+    }
+  }
+  dfs(0, 0);
+  return ans;
+};
+```
