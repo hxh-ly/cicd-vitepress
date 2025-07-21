@@ -7,8 +7,8 @@ hero:
   text: "知识体系，技能树"
   tagline: 前端、服务端、技能树、计算机
   image:
-    src: ./logo.png
-    alt: VitePress
+    src: ./public/logo.png
+    alt: helloWorld
   actions:
     - theme: brand
       text: 快速开始

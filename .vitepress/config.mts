@@ -47,7 +47,7 @@ export default withMermaid(
     srcDir: "./src",
 
     themeConfig: {
-      logo: "./logo.png",
+      logo: "/logo.png",
       // https://vitepress.dev/reference/default-theme-config
       search: {
         provider: "local",
