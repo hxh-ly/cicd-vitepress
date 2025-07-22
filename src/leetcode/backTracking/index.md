@@ -1,20 +1,25 @@
+# 回溯
+
 回溯有一个增量构造答案的过程，这个过程通常用递归实现
 ![alt text](img/image01.png)
 只要边界条件和非边界条件写对了，其他事情你交给数学归纳法就好了
 
-回溯三问：
+## 回溯三问：
+
+以 78 子集这题为例
+
 当前操作：枚举 path[i]要填入的字母
 子问题？构造字符串>=i 的部分
 下一个子问题？构造字符串>=i+1 的部分
 
-回溯问题分类：
+# 回溯问题分类：
 
 ## 子集型回溯
 
-- 子集型回溯（选/不选）
-  模版 1.回溯三问：当前操作是枚举第 i 个数选/不选；子问题？从下标>=i 的数字中构造子集；下一个子问题？从下标>=i+1 的数字中构造子集
+子集型回溯（选/不选）
+- 模版 1.回溯三问：当前操作是枚举第 i 个数选/不选；子问题？从下标>=i 的数字中构造子集；下一个子问题？从下标>=i+1 的数字中构造子集
 
-模版 2.从答案的角度：枚举第一个数选谁；枚举第二个数选谁
+- 模版 2.从答案的角度：枚举第一个数选谁；枚举第二个数选谁
 回溯三问：当前的操作？枚举 j>=i 的数字，加入 path；子问题？从下标>=i 的数字中构造子集;下一个子问题？从下标>=i+1 的数字中构造子集
 
 ## lc.78.子集
@@ -110,13 +115,14 @@ function isOk(path) {
 
 ## 组合型回溯
 
+就是枚举每一个
 剪枝优化：
 如果 m = path.length, 剩余要选个数为 d = k - m.假设现在从[1,i]里选，i < d，这样的话就选不满。这个分支可以剪枝优化掉。
 ![alt text](./img/image02.png)
 
 ## lc.77.组合
-
-way1:
+![alt text](./img/image03.png)
+way1:枚举每一个
 
 ```js
 /**
@@ -180,6 +186,8 @@ var combine = function (n, k) {
 ```
 
 解释： 见注释
+
+时间复杂度： k* C（n，k）
 
 ## 216. 组合总和 III
 
@@ -246,8 +254,8 @@ var combinationSum3 = function (k, n) {
 ## 22.括号生成
 
 n 对括号，生成所有可能。
-
-way1:
+![alt text](./img/image06.png)
+way1:选与不选
 
 ```js
 // 选和不选， 选就等价添加左括号
@@ -287,8 +295,8 @@ way2：枚举下一个左括号的位置
 
 ```js
 var generateParenthesis = function (n) {
-     const ans = [];
-    const path = [];
+  const ans = [];
+  const path = [];
   // 目前填了i个括号
   // 这i个括号的左括号个数 - 右括号个数 = balance
   function dfs(i, balance) {
@@ -311,3 +319,92 @@ var generateParenthesis = function (n) {
   return ans;
 };
 ```
+
+## 排列型回溯
+
+## lc.46.全排列
+![alt text](./img/image05.png)
+排列和组合的区别在于，有序列「1，2，3」 「2，1，3」是不同的
+
+```js
+var permute = function (nums) {
+  let path = Array(nums.length).fill(0);
+  let isSelect = Array(nums.length).fill(false);
+  let n = nums.length;
+  let ans = [];
+  function f(i) {
+    if (i === n) {
+      ans.push([...path]);
+      return;
+    }
+    for (let index = 0; index < n; index++) {
+      if (!isSelect[index]) {
+        path[i] = nums[index];
+        isSelect[index] = true;
+        f(i + 1);
+        isSelect[index] = false;
+      }
+    }
+  }
+  f(0);
+  return ans;
+};
+```
+
+解释：设计一个数组用来存储元素是否访问过，没访问过的才添加到 path 里
+
+
+时间复杂度：排列数量 × 每个排列的构建时间 = n! × O(n) = O(n × n!)
+
+排列数量：O(n!)
+
+每个排列的构建时间：O(n)
+
+
+## lc.51.N皇后问题
+![alt text](./img/image07.png)
+皇后不能放在同行同列同斜线中，可以使用全排列枚举。
+`col[i]`表示第 i 行，皇后放置在哪一列
+`on_path[i]`表示 i 行已经填入。
+`diag1`用于表示斜边 左上角已占用。如 diag1[r+c]
+`diag2`用于表示斜边 右下角已占用。如 diag2[r-c + n ] 因为 r-c 可能是负数，所以要+n。
+
+```js
+var solveNQueens = function (n) {
+  let col = Array(n).fill(0);
+  let on_path = Array(n).fill(0);
+  let m = 2 * n - 1;
+  let diag1 = Array(m).fill(0);
+  let diag2 = Array(m).fill(0);
+  let ans = [];
+  function dfs(r) {
+    if (r === n) {
+      // 构造答案
+      let t = Array(n)
+        .fill(0)
+        .map(() => Array(n).fill("."));
+      col.forEach((c, r) => {
+        t[r][c] = "Q";
+      });
+      ans.push(t.map((v) => v.join("")));
+      return;
+    }
+    // 遍历列
+    for (let c = 0; c < n; c++) {
+      if (!on_path[c] && diag1[c + r] && diag2[c - r + n]) {
+        on_path[c] = 1;
+        col[r] = c;
+        diag1[c + r] = 1;
+        diag2[c - r + n] = 1;
+        dfs(r + 1); // 递归行，全排列
+        on_path[c] = 0;
+        diag1[c + r] = 0;
+        diag2[c - r + n] = 0;
+      }
+    }
+  }
+  dfs(0);
+};
+```
+
+时间复杂度：O(n*n!)
