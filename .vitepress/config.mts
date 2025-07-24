@@ -38,7 +38,12 @@ const leetdCode = [
   { text: "二叉树", link: "leetcode/tree/recursion" },
   { text: "回溯", link: "leetcode/backTracking/index" },
 ];
-const backEndConfig = [{ text: "后端", link: "back-end/index" }, { text: "redis", link: "back-end/redis" }];
+const backEndConfig = [
+  { text: "后端", link: "back-end/index" },
+  { text: "redis", link: "back-end/redis" },
+  { text: "nest文件上传", link: "back-end/nest_upload" },
+];
+const mobileConfig = [{ text: "web-适配", link: "mobile/rem.md" }];
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
@@ -86,6 +91,10 @@ export default withMermaid(
         {
           text: "后端",
           items: backEndConfig,
+        },
+        {
+          text: "跨端",
+          items: mobileConfig,
         },
       ],
       socialLinks: [{ icon: "github", link: "https://github.com/hxh-ly/" }],
