@@ -44,13 +44,13 @@ const backEndConfig = [
   { text: "nest文件上传", link: "back-end/nest_upload" },
 ];
 const mobileConfig = [{ text: "web-适配", link: "mobile/rem.md" }];
+const htmlConfig = [{ text: "html", link: "interview/html-interview" }];
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
     title: "axuaxu",
     description: "知识体系，技能树",
     srcDir: "./src",
-
     themeConfig: {
       logo: "/logo.png",
       // https://vitepress.dev/reference/default-theme-config
@@ -95,6 +95,10 @@ export default withMermaid(
         {
           text: "跨端",
           items: mobileConfig,
+        },
+        {
+          text: "HTML",
+          items: htmlConfig,
         },
       ],
       socialLinks: [{ icon: "github", link: "https://github.com/hxh-ly/" }],

@@ -16,8 +16,8 @@
 | 标签   | 含义与使用场景                                                                                                                                                                                             |
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | video  | src/loop/autoplay/poster                                                                                                                                                                                   |
-| audio  | 嵌入音频，核心属性与<video>类似（无 poster），用于播放音乐、语音等                                                                                                                                         |
-| source | 为<video>/<audio>提供 “多格式源”（浏览器会自动选择支持的格式），例：html<br><video controls><br> <source src="video.mp4" type="video/mp4"><br> <source src="video.webm" type="video/webm"><br></video><br> |
+| audio  | 嵌入音频，核心属性与`<video>`类似（无 poster），用于播放音乐、语音等                                                                                                                                         |
+| source | 为`<video/>/<audio/>`提供 “多格式源”（浏览器会自动选择支持的格式），例：`html<br><video controls><br> <source src="video.mp4" type="video/mp4"><br> <source src="video.webm" type="video/webm"><br></video><br>` |
 
 其他常用标签
 
@@ -25,10 +25,9 @@
 | --------------------------------------- | --------------------------------------------------------------------------------- |
 | canvas                                  | 绘图画布（2D/3D），需通过 JS 操作（如绘制图形、动画、游戏），本身无内容，依赖脚本 |
 | svg                                     | 矢量图形标签（可直接嵌入 HTML），用于绘制图标、图表等（放大不失真）               |
-| details                                 | 可折叠 / 展开的 “详情区域”，默认折叠，配合<summary>作为标题：                     |
+| details                                 | 可折叠 / 展开的 “详情区域”，默认折叠，配合`<summary>`作为标题：                     |
 | mark                                    | 高亮显示文本（如搜索结果中的关键词），视觉上默认黄色背景                          |
-| time                                    | 表示时间 / 日期，datetime 属性存储机器可读格式（利于 SEO）：                      |
-| <time datetime="2025-07-24">今天</time> |
+| time                                    | 表示时间 / 日期，datetime 属性存储机器可读格式（利于 SEO）：`<time datetime="2025-07-24">今天</time> `                      |
 
 ## 为什么用语义化标签
 
@@ -64,7 +63,7 @@ hash 是页面的锚点
 
 ### wesocket 是一种全双工通信协议，允许客户端与服务器之前简历持久连接，实现双方实时双工通信。打破 Http 的一问一答，适用需要实时数据交互的场景（IM，实时通知、在线协作工具）
 
-特点：1.持久连接。无需重复建立连接。2.全双工通信，双方实时传输。3.低开销，握手协议基于 http 协议，后续通信不携带冗余头部消息。4.跨域支持.`acess-control-allow-origin`;5.二进制传输。不仅传输文本（UTF-8)，还能传输二进制图片、视频。
+特点：1.持久连接。无需重复建立连接。2.全双工通信，双方实时传输。3.低开销，握手协议基于 http 协议，后续通信不携带冗余头部消息。4.跨域支持.`acess-control-allow-origin`;5.二进制传输。不仅传输文本UTF-8，还能传输二进制图片、视频。
 
 ### 工作流程
 
@@ -80,7 +79,7 @@ hash 是页面的锚点
 | 方向     | 单                   | 双                       |
 | 头部开销 | 每次请求携带完整头部 | 握手后无冗余头部，开销低 |
 | 场景     | 网页请求             | 聊天、实时传输           |
-| 协议表示 | https://             | wss://                   |
+| 协议表示 | `https://`         |`wss://`               |
 
 ### 应用
 
@@ -134,8 +133,6 @@ wss.on("connection", () => {
 
 默认非拖拽 ，需设置`draggable = 'true'`
 
-## Canvas
-
 ## 本地存储的区别。
 
 | 区别     | localStorage       | sessionStorage    | indexedDB                          | cookie                    |
@@ -151,3 +148,113 @@ wss.on("connection", () => {
 1.全局状态管理搭配系统设置，2.改变状态【dark/light】,3.改变`document.documentElement.classList.add('dark')`,4.从而影响css变量。
 
 ## rem适配移动端
+1.根据设计稿与屏幕比列，得出根的fontsize也就是rem。然后窗口改变重新计算。
+2.通过`postcss-pxtorem`进行px转换。
+
+## Html-dom的渲染过程
+输入ip，dns解析，http三次握手建立链接，收到资源，浏览器解析html文档，经历布局，绘制，光栅化（将dom元素转化为位图）
+
+1.解析HTML构建DOM树
+- 过程：读取HTML字节 -> 转为字符 -> 令牌化 -> 构建节点 -> 形成DOM树 
+- 特点：遇到script会暂停解析执行js，遇到link、style会并行下载css
+- 输出 树结构的dom
+2.解析css成cssom树
+- 过程：解析外部css、内连、行内；处理层叠规则和继承关系(如!important、选择器权重)
+- 特点：css解析树阻塞渲染的，从右到左解析css选择器(`.nav li a` 先解析a)
+- 输出：cssom树 
+
+3.合并dom和cssom
+- 过程遍历DOM树的每个可见节点
+- 为每个节点找到匹配的cssom规则
+- 组成形成包含所有可见节点以及样式的渲染树
+
+4.布局/重排
+- 过程：计算每个渲染树节点在屏幕的精确位置和尺寸；基于视口大小、盒模型】浮动和定位计算
+- 触发条件：首次加载、窗口变化、元素位置/尺寸改变
+- 关键指标：浏览器会尽量通过增量布局减少计算量
+
+5.绘制/光栅化
+- 过程：将布局结果转化为屏幕的实际像素；填充颜色、文本、图像、边框等视觉属性
+- 层级处理：按层叠上下文顺序绘制，处理透明、混合模式等效果
+- 优化技术：浏览器将元素提升至独立图层
+
+6.合成：
+- 过程：将不同图层合并成最终屏幕图像；应用GPU加速的变换
+- 优势：避免重新布局和绘制，60fps流畅动画的关键
+
+### 关键性能优化点
+1.减少重排
+```js
+el.style.width = '100px'
+el.style.height = el.offsetWidth+'px'
+
+// 批量读写
+requestAnimationFrame(()=>{
+  el.style.width = '100px'
+el.style.height = el.offsetWidth+'px'
+})
+```
+2.选择器优化性能
+- 避免嵌套过深
+- 优先使用类选择器而非属性选择器
+ps：为什么？ 类选择器可以快速缩小范围，维护了类名的索引映射；属性选择器需要遍历检查每一个元素的属性
+
+
+3.图层管理
+```css
+.animate-element {
+will-change:transform;
+transform: translateZ(0)
+}
+```
+
+### 渲染阻塞行为
+|资源类型|解析阻塞|渲染阻塞|解决方案|
+|---|---|---|---|
+|script|1|1|async/defer|
+|link css|0|1|媒体查询media=print/仅内嵌|
+|图片/字体|0|1|预加载`<link rel = preload>|
+
+### link标签的作用
+- 加载css
+- - `<link rel="stylesheet" href="style.css">`
+- - 媒体查询: `media="print"`指定特定媒体类型
+- - 完整性校验 `integrity`属性 + corssorigin=`anonymous`
+- 替代样式表:`rel="alternate stylesheet"`
+
+- 网站图标与资源标识
+- - `<link rel='icon' href='/icon.svg'>`
+- - `rel="apple-touch-icon"`
+- - `rel="manifest"`
+- - `rel='mask-icon'`
+- 预加载、dns解析、预链接
+- - `rel='preload'`
+- - `rel='dns-prefetch'`
+- - `rel='preconnect'`
+- - `rel-'prefetch'`
+- 替代内容与备份资源
+- - 替换样式表 `rel="alternate stylesheet"`
+- - RSS/Atom订阅 `rel="alternate" type="application/rss+xml"`
+- - 多语言版本 `rel='alternate' hreflang="en"`
+
+#### 资源加载优先级
+浏览器根据rel属性确定资源加载优先级
+|rel值|资源类型|优先级|说明|
+|---|---|---|---|
+|preload|关键资源|最高|立即加载，阻塞渲染|
+|sheet|css|最高|阻塞渲染，影响首次渲染|
+|preconnect|连接|中高|提前建立连接，抢先执行部分或全部握手|
+|dns-prefetch|DNS|低|后台dns预解析|
+|prefetch|非关键资源|最低|空闲时加载，用与未来页面|
+
+
+
+#### 最佳实践
+|实践|具体|
+|---|---|
+|关键Css内联|首屏关键放在html里|
+|非关键css异步加载 | `media='print' onload='this.media=all'`|
+|预加载关键资源|字体、首屏图片、关键脚本|
+|使用dns-preftech/preconnect|特别是第三方资源|
+|SRI完整性校验|确保cdn资源未被篡改|
+|提供现代图标格式|优先使用svg格式图标|
