@@ -258,3 +258,46 @@ transform: translateZ(0)
 |使用dns-preftech/preconnect|特别是第三方资源|
 |SRI完整性校验|确保cdn资源未被篡改|
 |提供现代图标格式|优先使用svg格式图标|
+
+## Shadow DOM
+- 概念：浏览器元素的DOM封装技术
+- 作用：通过样式、脚本隔离实现组件封装，是web components标准的重要组成部分。
+- 优点：支持良好，广泛用于原生组件和UI库
+- 劣势：受限于学习成本和框架竞争，流行程度不及 React/Vue等框架的组件方案。
+- 场景：追求 无框架依赖 或 原生组件化的场景中发挥优势。
+- 举例 
+```html
+<body>
+  <my-component>
+    <p slot='main-content' class='slotted-text'>这段文本从主DOM插入到Shadow插槽</p>
+  </my-component>
+</body>
+<script>
+  class MyComponent extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: 'open' });
+      this.shadowRoot.innerHTML = 
+      `<style>.red{color:red} .green {color:green}</style>
+      <div class='red'>
+      <p class=‘text’ part="shadow-text"> 这是shadow dom里的p</p>
+      red text
+       <!-- 定义插槽，接收主 DOM 插入的内容 -->
+          <slot name="main-content"></slot>
+      </div>
+      `;
+    }
+    connectedCallback(){this.shadowRoot.querySelector('div').classList.add("green")}
+  }
+  customElements.define('my-component',MyComponent);
+</script>
+<style>
+  .my-component::part(shadow-text){
+      color:yellow;
+  }
+  /* 给主DOM插入到Slot的元素内容添加样式 */
+  .my-component ::slotted(.slotted-text){
+    color: blue
+  }
+</style>
+```

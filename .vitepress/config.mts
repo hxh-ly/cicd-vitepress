@@ -45,6 +45,12 @@ const backEndConfig = [
 ];
 const mobileConfig = [{ text: "web-适配", link: "mobile/rem.md" }];
 const htmlConfig = [{ text: "html", link: "interview/html-interview" }];
+const microFrontend = [
+  { text: "微前端", link: "micro-frontend/index" },
+  { text: "微前端JS隔离", link: "micro-frontend/js-micro-front" },
+  { text: "微前端css隔离", link: "micro-frontend/css-micro-front" },
+   { text: "微前端无界方案", link: "micro-frontend/wujie" },
+];
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
@@ -99,6 +105,10 @@ export default withMermaid(
         {
           text: "HTML",
           items: htmlConfig,
+        },
+        {
+          text: "微前端",
+          items: microFrontend,
         },
       ],
       socialLinks: [{ icon: "github", link: "https://github.com/hxh-ly/" }],
