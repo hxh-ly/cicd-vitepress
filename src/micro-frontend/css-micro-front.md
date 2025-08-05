@@ -30,6 +30,42 @@ Wujie 是一款轻量且高性能的微前端解决方案，内部实现更加�
 ### 样式沙箱处理
 - 除了 Shadow DOM，Wujie 还会拦截所有 `<style>` 和 `<link>` 标签，将其作用域局限在 Shadow Root 内部。
 - 支持`::post` 和 `::slotted`机制来暴露特定DOM样式给主应用。
+```js
+class MyComponent extends HTMLElement {
+  constructor() {
+    super();
+    const shadow = this.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
+      <style>
+        /* 插槽容器样式 */
+        .slot-container {
+          margin: 20px;
+        }
+      </style>
+      <div class="slot-container">
+      <p class='post-text'> ::post</p>
+        <!-- 插槽 -->
+        <slot name="user-content"></slot>
+      </div>
+    `;
+  }
+}
+customElements.define('my-component', MyComponent);
+```
+```html
+<my-component>
+  <div clas='slot-text'>slot-text</div>
+</my-component>
+<style>
+  my-component::post(.post-text) {
+    color:yellow
+  }
+  my-component ::slotted(.slot-text) {
+    color:red
+  }
+</style>
+```
+
 
 ## micro-app的样式隔离
 micro-app 是一款轻量的微前端框架，注重性能与隔离。

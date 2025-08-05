@@ -49,6 +49,7 @@ const microFrontend = [
   { text: "微前端", link: "micro-frontend/index" },
   { text: "微前端JS隔离", link: "micro-frontend/js-micro-front" },
   { text: "微前端css隔离", link: "micro-frontend/css-micro-front" },
+   { text: "微前端乾坤方案", link: "micro-frontend/qiankun" },
    { text: "微前端无界方案", link: "micro-frontend/wujie" },
 ];
 export default withMermaid(

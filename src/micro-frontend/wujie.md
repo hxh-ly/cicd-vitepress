@@ -22,6 +22,8 @@
 
 
 ## 路由的同步机制
+策略：“隔离为主，按需同步”
+
 在`iframe`内部进行`history.pushState`，浏览器会自动在`join session history`中添加`iframe`的seesion-history，浏览器的前进、后退在不做任何处理的情况下可以直接作用于子应用
 
 劫持`iframe`的`history.pushState`和`history.replaceState`,就可以将子应用的`url`同步到主应用的`query`参数哈桑，当刷新浏览器初始化`iframe`，读回子应用的`url`并使用`iframe`的`history.replaceState`进行同步。
