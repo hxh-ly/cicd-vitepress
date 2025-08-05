@@ -52,6 +52,9 @@ const microFrontend = [
    { text: "微前端乾坤方案", link: "micro-frontend/qiankun" },
    { text: "微前端无界方案", link: "micro-frontend/wujie" },
 ];
+const browserConfig = [{
+  text: "浏览器原理", link: "browser/index" 
+}]
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
@@ -111,6 +114,10 @@ export default withMermaid(
           text: "微前端",
           items: microFrontend,
         },
+        {
+          text: "浏览器原理",
+          items: browserConfig,
+        }
       ],
       socialLinks: [{ icon: "github", link: "https://github.com/hxh-ly/" }],
       footer: {
