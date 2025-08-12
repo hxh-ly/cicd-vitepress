@@ -250,3 +250,43 @@ wx.requestPayment({
 - 用户留存率不高
 - 性能和复杂度有上限，体积限制
 - 受限微信，自由度较低
+
+## 小程序的事件
+冒泡事件列表
+
+|类型|触发条件|
+|---|---|
+|touchStart|触摸动作开始|
+|touchMove|手指触摸后移动|
+|touchcancel|触摸被打断，来电提醒、弹窗|
+|touchend|触摸结束|
+|tap|触摸后马上离开|
+|longpress|触摸超350ms，如果触发了这个，则tap不触发|
+
+
+- `bind`绑定事件：`bindtap`
+- `catch`阻止冒泡：`catchtap`
+- `capture`捕获事件阶段，`capture-bind:tap` `capture-catch:tap`(中断捕获，取消冒泡)
+  - 下列，点击inner View ，事件顺序为：handleTap2 handleTap4 handleTap3 handleTap1
+  ```wxml
+  <view id="outer" bind:touchstart="handleTap1" capture-bind:touchstart="handleTap2">
+  outer view
+  <view id="inner" bind:touchstart="handleTap3" capture-bind:touchstart="handleTap4">
+    inner view
+  </view>
+</view>
+  ```
+
+- `mul-bind`:换而言之，所有 mut-bind 是“互斥”的，只会有其中一个绑定函数被触发。同时，它完全不影响 bind 和 catch 的绑定效果。
+  - 下列，点击inner View，触发顺序为 handleTap3 handleTap2 
+  ```wxml
+  <view id="outer" mut-bind:tap="handleTap1">
+  outer view
+  <view id="middle" bindtap="handleTap2">
+    middle view
+    <view id="inner" mut-bind:tap="handleTap3">
+      inner view
+    </view>
+  </view>
+</view>
+  ```
