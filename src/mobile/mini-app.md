@@ -268,18 +268,18 @@ wx.requestPayment({
 - `catch`阻止冒泡：`catchtap`
 - `capture`捕获事件阶段，`capture-bind:tap` `capture-catch:tap`(中断捕获，取消冒泡)
   - 下列，点击inner View ，事件顺序为：handleTap2 handleTap4 handleTap3 handleTap1
-  ```wxml
+```wxml
   <view id="outer" bind:touchstart="handleTap1" capture-bind:touchstart="handleTap2">
   outer view
   <view id="inner" bind:touchstart="handleTap3" capture-bind:touchstart="handleTap4">
     inner view
   </view>
 </view>
-  ```
+```
 
 - `mul-bind`:换而言之，所有 mut-bind 是“互斥”的，只会有其中一个绑定函数被触发。同时，它完全不影响 bind 和 catch 的绑定效果。
   - 下列，点击inner View，触发顺序为 handleTap3 handleTap2 
-  ```wxml
+```wxml
   <view id="outer" mut-bind:tap="handleTap1">
   outer view
   <view id="middle" bindtap="handleTap2">
@@ -289,4 +289,4 @@ wx.requestPayment({
     </view>
   </view>
 </view>
-  ```
+```
