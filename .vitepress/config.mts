@@ -32,6 +32,7 @@ const reactConfig = [
   { text: "React原理", link: "react/react-core" },
   { text: "Mini-React", link: "react/mini-react" },
   { text: "ReactPlayground", link: "react/playground" },
+  { text: "React+KeepAlive", link: "react/react-keepAlive" },
 ];
 const leetdCode = [
   { text: "链表", link: "leetcode/link/index" },
@@ -43,18 +44,30 @@ const backEndConfig = [
   { text: "redis", link: "back-end/redis" },
   { text: "nest文件上传", link: "back-end/nest_upload" },
 ];
-const mobileConfig = [{ text: "web-适配", link: "mobile/rem.md" }];
+const mobileConfig = [
+  { text: "web-适配", link: "mobile/rem.md" },
+  { text: "小程序", link: "mobile/mini-app.md" },
+];
 const htmlConfig = [{ text: "html", link: "interview/html-interview" }];
 const microFrontend = [
   { text: "微前端", link: "micro-frontend/index" },
   { text: "微前端JS隔离", link: "micro-frontend/js-micro-front" },
   { text: "微前端css隔离", link: "micro-frontend/css-micro-front" },
-   { text: "微前端乾坤方案", link: "micro-frontend/qiankun" },
-   { text: "微前端无界方案", link: "micro-frontend/wujie" },
+  { text: "微前端乾坤方案", link: "micro-frontend/qiankun" },
+  { text: "微前端无界方案", link: "micro-frontend/wujie" },
 ];
-const browserConfig = [{
-  text: "浏览器原理", link: "browser/index" 
-}]
+const browserConfig = [
+  {
+    text: "浏览器原理",
+    link: "browser/index",
+  },
+];
+const cssConfig = [
+  {
+    text: "CSS",
+    link: "css/index",
+  },
+];
 export default withMermaid(
   defineConfig({
     base: process.env.BASE_PATH || "",
@@ -70,7 +83,13 @@ export default withMermaid(
       nav: [
         {
           text: "前端基础",
-          items: [{ text: "React", link: "/react" }],
+          items: [
+            { text: "React", link: "/react" },
+            {
+              text: "JS基础",
+              link: "/base-js",
+            },
+          ],
         },
         {
           text: "前端工程化",
@@ -117,7 +136,11 @@ export default withMermaid(
         {
           text: "浏览器原理",
           items: browserConfig,
-        }
+        },
+        {
+          text: "css",
+          items: cssConfig,
+        },
       ],
       socialLinks: [{ icon: "github", link: "https://github.com/hxh-ly/" }],
       footer: {

@@ -232,3 +232,228 @@ person1.foo4()(); //p1
 person1.foo4.call(person2)(); //p2
 person1.foo4().call(person2); //p1
 ```
+
+## 防抖和截流
+
+### 防抖
+
+频繁触发，当触发后超过 `几百ms(自己设定)`后，则执行一次。
+
+```js
+function debounce(cb, delay) {
+  let timer;
+  return function (...args) {
+    clearTimer(timer);
+    timer = setTimeout(() => {
+      cb.apply(this, ...args);
+    }, delay);
+  };
+}
+```
+
+### 截流
+
+每`几百ms（自己设定）`触发一次
+
+`🙂‍↔️
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+``js
+function throttle(cb, delay) {
+  let start = 0; // 如果 let start = Date.now() -> 时间相差很短，第一次不执行
+  return function (...args) {
+    let now = Date.now();
+    if (now - start >= delay) {
+      cb.apply(this, ...args);
+      start = Date.now();
+    }
+  };
+}
+```
