@@ -77,15 +77,19 @@
 | 适用场景 | 大多数副作用（数据请求、订阅） | 读取 DOM 并同步修改（不闪烁） |
 | 性能影响 | 无明显影响                     | 可能阻塞渲染                  |
 
-## react 为什么hooks不能放在条件判断或者嵌套里。
-核心原因：React依赖Hooks的调用顺序来正确关联状态和副作用，破坏顺序会导致状态管理混乱。
-具体原因：Hooks依赖“稳定的调用顺序”。react内部通过一个`hook链表`来管理组件的hooks（useState、useEffect）。每次组件渲染时，react会按顺序遍历这个链表，将每个hook与对应的状态/副作用关联。这个机制的前提是：**每次组件渲染时，Hooks的调用顺序必须完全一致。**
+## react 为什么 hooks 不能放在条件判断或者嵌套里。
 
-实际后果：报错或者状态异常，开发环境监测到hook调用顺序不一致，并抛出明确错误：`Error:Rendered more hooks than during the previous render`.
+核心原因：React 依赖 Hooks 的调用顺序来正确关联状态和副作用，破坏顺序会导致状态管理混乱。
+具体原因：Hooks 依赖“稳定的调用顺序”。react 内部通过一个`hook链表`来管理组件的 hooks（useState、useEffect）。每次组件渲染时，react 会按顺序遍历这个链表，将每个 hook 与对应的状态/副作用关联。这个机制的前提是：**每次组件渲染时，Hooks 的调用顺序必须完全一致。**
+
+实际后果：报错或者状态异常，开发环境监测到 hook 调用顺序不一致，并抛出明确错误：`Error:Rendered more hooks than during the previous render`.
+
 ### 总结
-1. Hook链表与状态的关联。完全依赖调用顺序，每一个hook按调用顺序对应链表的一个机诶单，节点存储该Hook的状态/副作用信息。
-2. 顺序不一致危害：如条件、循环导致两次渲染的hooks调用顺序/数量不一样，链表遍历与实际调用无法匹配，最终状态错乱（读错、丢失）
-3. 设计本质：React通过”顺序匹配“而非”命名标识”管理Hooks，是为了简化API（无需手动命名状态）并保证 性能（链表遍历效率高）。这一设计决定Hooks必须在组件顶层调用，不能被条件逻辑包裹。
+
+1. Hook 链表与状态的关联。完全依赖调用顺序，每一个 hook 按调用顺序对应链表的一个机诶单，节点存储该 Hook 的状态/副作用信息。
+2. 顺序不一致危害：如条件、循环导致两次渲染的 hooks 调用顺序/数量不一样，链表遍历与实际调用无法匹配，最终状态错乱（读错、丢失）
+3. 设计本质：React 通过”顺序匹配“而非”命名标识”管理 Hooks，是为了简化 API（无需手动命名状态）并保证 性能（链表遍历效率高）。这一设计决定 Hooks 必须在组件顶层调用，不能被条件逻辑包裹。
+
 ## react 常见的 hooks
 
 - 状态管理：`useState` `useReducer`
@@ -94,6 +98,65 @@
 - 跨组件通信： `useContext`
 - DOM/变量： `useRef` `useImperativeHandle`
 - 调试：`useDebugValue`
+
+## immutable.js 为什么能优化性能
+
+核心是 “不可变数据 + 结构共享”。当数据发生改变，要保证旧数据同时可用且不变，同时为了避免 deepCopy 把所有节点都复制一遍带来的性能损耗，Immutable 使用[结构共享]().即如果对象树中一个节点发生变化，只修改这个节点和受它影响的父节点，其它节点则进行共享。请看下面动画：
+![immutable](./readmeImg/immutable.awebp)
+函数组件
+
+```js
+import { useState } from "react";
+import { Map } from "immutable";
+
+function UserProfile() {
+  // 初始化Immutable状态
+  const [user, setUser] = useState(Map({ name: "Bob", age: 25 }));
+
+  // 修改状态（返回新Map）
+  const handleIncrementAge = () => {
+    // 用update更新age（原状态不变，返回新状态）
+    const newUser = user.update("age", (age) => age + 1);
+    setUser(newUser); // 触发重渲染
+  };
+
+  return (
+    <div>
+      <p>Name: {user.get("name")}</p>
+      <p>Age: {user.get("age")}</p>
+      <button onClick={handleIncrementAge}>+1 Age</button>
+    </div>
+  );
+}
+```
+
+性能优化- 值不变，引用不变；
+
+```jsx
+import { memo } from "react";
+import { Map } from "immutable";
+// 子组件：接收Immutable的user作为props
+const UserInfo = memo(({ user }) => {
+  console.log("UserInfo 渲染"); // 仅在user引用变化时触发
+  return <p>Name: {user.get("name")}</p>;
+});
+// 父组件
+function Parent() {
+  const [user, setUser] = useState(Map({ name: "Dave" }));
+  return (
+    <div>
+      <UserInfo user={user} />
+      <button onClick={() => setUser(user.set("name", "Dave"))}>
+        点击（name未实际变化，UserInfo不重渲染）
+      </button>
+    </div>
+  );
+}
+```
+注意事项：
+- 避免面频繁使用`toJS()` 大型数据可能导致性能问题。
+- 嵌套结构修改`setIn`：对于多层嵌套的`Map`和`List`，优先使用`setIn/updateIn`而非多次`get`+`set`
+- 与Redux配合，`state`通常设计为不可变，可用Immutable的`Map/List`作为state容器，reducer中通过`set/update`等方法返回新的state，配合`reselect`库进一步优化性能。
 
 ## useCallback 和 useMemo
 
@@ -1762,10 +1825,11 @@ const Counter = observer(() => {
 
 // 3.根组件直接使用（无需Provider注入）
 ```
+
 ### 总结
+
 - Redux： 通过“不可变状态+纯函数”保证状态变化可预测，适合大型项目但代码较繁琐；
 - Mobx： 通过"可变状态+自动响应"简化开发，代码简洁但需要信任开发者对状态的修改（可能导致不可预期性）
-
 
 ## 36.如何设计可复用的表单组件？需要考虑哪些校验与提交逻辑？
 
