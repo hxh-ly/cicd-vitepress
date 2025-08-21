@@ -26,7 +26,7 @@
 
 ## React 的 class 类有什么生命周期？
 
-构建（constructor)： 派(getDerivedStateFromProps) -> 绘(render) -> 挂(componentDidMount)
+构建（constructor）： 派(getDerivedStateFromProps) -> 绘(render) -> 挂(componentDidMount)
 | 方法 | 调用时机 | 用途 | 是否可调用 setState |
 | ---- | ---- | ---- | ---- |
 | constructor | 组件初始化 | 初始化 state，绑定方法 | ❌ |
@@ -447,15 +447,21 @@ function App(){
 ## 8.解释 React 的“组件即函数”理念（函数组件和类组件的本质区别）
 
 理念：
-1.React 组件本质上是一个接受输入（props）并返回输出（UI 描述）的函数。 2.组件的核心职责是：props -> UI 3.组件应该是纯净的：相同输入总是产生相同输出 4.组件应该是可组合的：像函数一样可以嵌套组合
-本质区别： 1.语法和结构
+1. React 组件本质上是一个接受输入（props）并返回输出（UI 描述）的函数。 
+2. 组件的核心职责是：props -> UI 
+3. 组件应该是纯净的：相同输入总是产生相同输出 
+4. 组件应该是可组合的：像函数一样可以嵌套组合
 
-- 函数组件：一个普通的 javascript 函数，接受 props 作为参数并返回 jsx。没有生命周期方法、this
-- 类组件：基于 ES6 类定义，继承自 React.Component,需要手动实现 render 方法，并使用 this.state 和 this.setState 管理状态。 2.生命周期管理：
-- 类组件：类组件有内建的生命周期方法，可以在这些方法中执行异步操作、更新状态等。例如 `componentDidMount` `componentWillUnmount`
-- 函数组件：函数组件没有生命周期方法，但通过 React Hooks（如 useEffect）引入函数组件的副作用处理，使函数组件具备类似类组件的生命周期管理功能。useEffect 允许我们在组件挂载、更新和卸载时执行副作用。 3.状态管理
-- 类组件：使用 this.state 来管理状态，使用 this.setState 来更新状态。setState 是异步的，并且会触发组件的重新渲染。
-- 函数组件：函数组件原本是无状态的，但随着 React Hooks 的引入，useState 使得函数组件也可以使用状态管理。
+本质区别： 
+- 1.语法和结构
+- - 函数组件：一个普通的 javascript 函数，接受 props 作为参数并返回 jsx。没有生命周期方法、this
+- - 类组件：基于 ES6 类定义，继承自 React.Component,需要手动实现 render 方法，并使用 this.state 和 this.setState 管理状态。 
+- 2.生命周期管理：
+- - 类组件：类组件有内建的生命周期方法，可以在这些方法中执行异步操作、更新状态等。例如 `componentDidMount` `componentWillUnmount`
+- - 函数组件：函数组件没有生命周期方法，但通过 React Hooks（如 useEffect）引入函数组件的副作用处理，使函数组件具备类似类组件的生命周期管理功能。useEffect 允许我们在组件挂载、更新和卸载时执行副作用。 
+- 3.状态管理
+- - 类组件：使用 this.state 来管理状态，使用 this.setState 来更新状态。setState 是异步的，并且会触发组件的重新渲染。
+- - 函数组件：函数组件原本是无状态的，但随着 React Hooks 的引入，useState 使得函数组件也可以使用状态管理。
   总结：React 的“组件即函数”理念，意味着 React 组件可以简单地用函数实现，而无需依赖复杂的类继承结构。函数组件通过其简洁的结构、易于理解的 API 和性能优势吗，成为现代 React 开发的首选方式。
 
 ## 9.React 的严格模式（Strict Mode）解决了哪些潜在问题？

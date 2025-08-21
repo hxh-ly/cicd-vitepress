@@ -26,6 +26,10 @@ const webpackCofig = [
     text: "CI/CD",
     link: "front-eng/CICD",
   },
+  {
+    text: "Vite",
+    link: "front-eng/vite-index",
+  },
 ];
 const reactConfig = [
   { text: "开始", link: "react/index" },
@@ -34,10 +38,25 @@ const reactConfig = [
   { text: "ReactPlayground", link: "react/playground" },
   { text: "React+KeepAlive", link: "react/react-keepAlive" },
 ];
+const vueConfig = [
+  {
+    text: "Vue",
+    link: "vue/index.md",
+  },
+  {
+    text: "Vue3 Diff",
+    link: "vue/vue3-diff.md",
+  },
+  {
+    text: "Vue3 KeepAlive-LRU",
+    link: "vue/keep-lru.md",
+  },
+];
 const leetdCode = [
   { text: "链表", link: "leetcode/link/index" },
   { text: "二叉树", link: "leetcode/tree/recursion" },
   { text: "回溯", link: "leetcode/backTracking/index" },
+  { text: "排序算法", link: "leetcode/sort/index" },
 ];
 const backEndConfig = [
   { text: "后端", link: "back-end/index" },
@@ -70,6 +89,9 @@ const cssConfig = [
 ];
 export default withMermaid(
   defineConfig({
+    vite: {
+      assetsInclude: ["**/*.awebp"],
+    },
     base: process.env.BASE_PATH || "",
     title: "axuaxu",
     description: "知识体系，技能树",
@@ -85,6 +107,7 @@ export default withMermaid(
           text: "前端基础",
           items: [
             { text: "React", link: "/react" },
+            { text: "Vue", link: "/vue" },
             {
               text: "JS基础",
               link: "/base-js",
@@ -140,6 +163,10 @@ export default withMermaid(
         {
           text: "css",
           items: cssConfig,
+        },
+        {
+          text: "Vue",
+          items: vueConfig,
         },
       ],
       socialLinks: [{ icon: "github", link: "https://github.com/hxh-ly/" }],
