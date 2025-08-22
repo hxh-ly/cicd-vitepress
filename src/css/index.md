@@ -1,3 +1,12 @@
+## css解析是在什么时候
+- css解析会阻塞渲染树构建，但不会阻塞HTML解析（和css可并行）
+- css未解析完成，浏览器会延迟渲染。
+- css解析的核心产物树CSSOM --》 描述所有样式规则的树形结构，包括选择器、样式属性以及优先级等信息。
+css核心解析实际是：
+- 首次加载阶段：与html解析并行，遇到css资源触发（外部/内部），生成CSSOM
+- 动态更新阶段：CSS内容变化，重新解析并更新CSSOM
+
+本质上为渲染树提供样式信息
 ## 垂直居中的几种方式
 
 flex
@@ -99,3 +108,22 @@ Table-cell（传统方法）
 |代表元素|div/navigator/aside/article/p/h1-h6 |span/strong/a/img/input |
 |嵌套|可嵌套 块/行内| 可嵌套行内/文本 |
 注意：img/input 虽然是行内元素（替换元素），但是可以设置宽高（内容由外部资源决定、图片的实际尺寸）
+
+## 0.5px的线
+```css
+.line {
+  width:300px; 
+  height:1px;
+  transform:scaleY(0.5);
+  background:black;
+  transform-origin:top; /* 为了对齐 */
+}
+
+.vertical-line {
+  width:1px; 
+  height:300px;
+  transform:scaleX(0.5);
+  background:black;
+  transform-origin:left; /* 为了对齐 */
+}
+```
