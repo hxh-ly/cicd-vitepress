@@ -1378,6 +1378,32 @@ requestIdleCallback((deadline) => {
 });
 ```
 
+## setState的核心实现
+### 用法
+1. 对象形式:`this.setState({ key: newValue })`
+2. 函数形式:`this.setState((prevState, props) => ({ key: prevState.key + 1 }))`
+第二个可选参数是回调函数：`this.setState(updater, callback)`在状态更新完成且组件重新渲染后执行（用于获取最新状态）。
+### 核心原理
+并非直接修改`this.state`并立即更新DOM，而是通过一套**状态更新机制+批处理**的机制实现。
+核心流程：
+1. 状态更新入队（不直接修改this.state)。不是直接更新，而是将传入的“状态更新描述”入队。目的是
+- 避免频繁修改状态导致频繁渲染
+- `this.state`本身是一个只读快照，`this.state={}`不会触发重新渲染
+  
+2. 批处理更新策略（异步性的核心）
+  将多个`setState`调用的更新请求**批处理合并** 然后一次性处理，最终只触发一次渲染。
+- 何时批量更新？
+- - React控制场景下（合成事件回调、生命周期方法）`setState`是异步的。
+- - 非React控制场景下 `setTimeout 原生事件回调` `setState`是同步的。
+- 批处理更新的实现？ 通过**事务机制标记当前是否处于“批量更新模式”**，是，更新请求被暂存；离开模式，一次性处理暂存的更新。
+
+3. 状态合并与计算
+- 对象浅合并
+- 函数，返回值作为下一个函数的输入值
+
+4. 触发更新
+- 计算完成后，React会触发组件的重新渲染流程。`shouldComponentUpdate` `render` `reconcile` `commit`
+
 ## 26.函数组件和类组件的区别以及选型建议
 
 | 区别     | 函数组件   | 类组件                       |

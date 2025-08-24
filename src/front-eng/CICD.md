@@ -220,3 +220,5 @@ jobs:
 ![alt text](./img/git_page_image3.png)
 
 最后查看构建的[网站vitePress](https://hxh-ly.github.io/cicd-vitepress/)
+
+## npm自动发布工具

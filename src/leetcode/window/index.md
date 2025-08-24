@@ -116,6 +116,37 @@ var longestSubarray = function (nums) {
 };
 ```
 
+### 3634. 使数组平衡的最少移除数目
+
+题目：给你一个整数数组 nums 和一个整数 k。
+
+如果一个数组的 最大 元素的值 至多 是其 最小 元素的 k 倍，则该数组被称为是 平衡 的。
+
+你可以从 nums 中移除 任意 数量的元素，但不能使其变为 空 数组。
+
+返回为了使剩余数组平衡，需要移除的元素的 最小 数量。
+
+注意：大小为 1 的数组被认为是平衡的，因为其最大值和最小值相等，且条件总是成立。
+
+大意：最小值、最大值满足一定的关系，不满足要删除一些元素
+
+```js
+// 思想：数组排序， 滑动窗口尽可能的大就行
+var minRemoval = function (nums, k) {
+  // 排序，最大最小可得到
+  let left = 0;
+  let max = 0;
+  nums.sort((a, b) => a - b);
+  for (let i = 0; i < nums.length; i++) {
+    while (nums[left] * k < nums[i]) {
+      left++;
+    }
+    max = Math.max(max, i - left + 1);
+  }
+  return nums.length - max;
+};
+```
+
 ## 越长越合法
 
 ### 209.长度最小的子数组
