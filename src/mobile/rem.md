@@ -1,15 +1,51 @@
 # rem 移动端搭建（react 项目）
-## 创建Vite+React项目
+
+## 背景
+
+项目想支持 PC、移动端
+
+## 方案
+
+- 根据不同端开发不同页面（成本最高）
+- 根据不同端加载不同 css 文件 （可取）
+- 根据响应式，允许不同样式规则（媒体查询 常见）
+- style 预处理器来做
+
+## 考虑问题：
+
+- 视窗 原数据
+  `<meta name="viewport" content="width=device-width,inital-scale=1.0"> </meta> `
+- 媒体查询
+```css
+@media (min-width: 300px) and (max-width: 750px) {
+  body {
+    font-size: 16px;
+  }
+}
+```
+
+- 弹性布局flex
+
+- 响应式单位
+- - rem（相对于html的font-size）
+- - em
+
+
+## 创建 Vite+React 项目
+
 npm create vite@latest react-h5-rem -- --template react
 cd react-h5-rem
 
 ## 安装依赖
+
 npm install
 
 ## 安装适配相关依赖
+
 npm install postcss-pxtorem autoprefixer --save-dev
 
 ## 方案说明
+
 适配原理
 以 750px 设计稿为基准，1rem = 75px（设计稿宽度的 1/10）
 通过 postcss-pxtorem 自动将 CSS 中的 px 转换为 rem 单位
@@ -41,7 +77,6 @@ window.addEventListener("resize", setRemUnit);
 
 // 监听屏幕旋转事件
 window.addEventListener("orientationchange", setRemUnit);
-
 ```
 
 ```js
@@ -57,7 +92,7 @@ export default {
   plugins: [
     autoprefixer(),
     pxtorem({
-      rootValue: 75,
+      rootValue: 37.5,
       propList: ["*"],
       unitPrecision: 5,
       selectorBlackList: ["ignore-rem"],
@@ -70,10 +105,11 @@ export default {
 };
 ```
 
-固定内容区域是750px，且居中显示。 >750px的设备则居中显示。 <750px的缩放显示，最小的显示尺度在375px。
+固定内容区域是 750px，且居中显示。 >750px 的设备则居中显示。 <750px 的缩放显示，最小的显示尺度在 375px。
+
 ```css
 #root {
-  min-width:375px;
+  min-width: 375px;
   max-width: 750px;
   margin: 0 auto;
   padding: 16px;
@@ -84,7 +120,7 @@ export default {
 }
 ```
 
-#  数据大屏适配方案 (vw vh、rem、scale)
+# 数据大屏适配方案 (vw vh、rem、scale)
 
 适配方案分析
 | 方案 | 实现方式 | 优点| 缺点|

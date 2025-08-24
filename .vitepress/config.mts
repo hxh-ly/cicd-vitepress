@@ -57,6 +57,7 @@ const leetdCode = [
   { text: "二叉树", link: "leetcode/tree/recursion" },
   { text: "回溯", link: "leetcode/backTracking/index" },
   { text: "排序算法", link: "leetcode/sort/index" },
+  { text: "滑动窗口", link: "leetcode/window/index" },
 ];
 const backEndConfig = [
   { text: "后端", link: "back-end/index" },
