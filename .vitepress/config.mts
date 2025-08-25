@@ -34,6 +34,7 @@ const webpackCofig = [
 const reactConfig = [
   { text: "开始", link: "react/index" },
   { text: "React原理", link: "react/react-core" },
+  { text: "React-Fiber", link: "react/fiber" },
   { text: "Mini-React", link: "react/mini-react" },
   { text: "ReactPlayground", link: "react/playground" },
   { text: "React+KeepAlive", link: "react/react-keepAlive" },
