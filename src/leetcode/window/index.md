@@ -147,6 +147,33 @@ var minRemoval = function (nums, k) {
 };
 ```
 
+### 1208. 尽可能使字符串相等
+
+题目大意：给两个字符串`s`,`t`。给出预算`mastCost`，目标是尽可能将`s`的每个字符转化为`t`的每个字符。每个字符转化的代价是`|s[i] - t[i]|`
+
+思想：算出代价数组，滑动窗口尽可能扩大
+
+```js
+var equalSubstring = function (s, t, maxCost) {
+  let arr = [];
+  for (let i = 0; i < s.length; i++) {
+    arr[i] = Math.abs(s.charCodeAt(i) - t.charCodeAt(i));
+  }
+  let sum = maxCost;
+  let left = 0;
+  let max = 0;
+  for (let i = 0; i < s.length; i++) {
+    // console.log(sum, i, left)
+    sum -= arr[i];
+    while (sum < 0) {
+      sum += arr[left++];
+    }
+    max = Math.max(max, i - left + 1);
+  }
+  return max;
+};
+```
+
 ## 越长越合法
 
 ### 209.长度最小的子数组
