@@ -1,10 +1,90 @@
 # 浏览器原理
 
+## 跨域有哪些解决方案
+
+- 服务端后台配置`Access-Control-Allow-Origin`
+- 通过服务器代理请求
+- JSONP
+  原理：利用`script`不受同源策略影响，动态创建`script`，请求后端接口，后端返回一段回调函数的 JS 代码，前端通过回调函数获取数据。只支持`GET`，后端需要配合返回`JSONP`
+
+```js
+// 前端：定义回调函数
+window.handleJsonp = (data) => {
+  console.log("JSONP返回数据：", data);
+};
+
+// 动态创建script标签，发起请求
+const script = document.createElement("script");
+script.src = "https://backend.com/api/user?callback=handleJsonp"; // 传递回调函数名
+document.body.appendChild(script);
+
+// 后端（Node.js）：返回带回调的JS代码
+app.get("/api/user", (req, res) => {
+  const callback = req.query.callback; // 获取前端传递的回调函数名
+  const data = { name: "张三", age: 20 };
+  res.send(`${callback}(${JSON.stringify(data)})`); // 返回：handleJsonp({...})
+});
+```
+
+- 页面间通信：postMessage
+
+```html
+<!-- 父页面（https://parent.com） -->
+<iframe id="childFrame" src="https://child.com"></iframe>
+<script>
+  const frame = document.getElementById("childFrame");
+  // 等待iframe加载完成后发送消息
+  frame.onload = () => {
+    // 发送消息：目标窗口、消息内容、允许的源
+    frame.contentWindow.postMessage(
+      { type: "greet", data: "Hello from parent" },
+      "https://child.com" // 限制接收方域名，提高安全性
+    );
+  };
+
+  // 监听子页面的回复
+  window.addEventListener("message", (e) => {
+    // 验证发送方域名（关键！防止恶意网站伪造消息）
+    if (e.origin !== "https://child.com") return;
+    console.log("收到子页面消息：", e.data);
+  });
+</script>
+
+<!-- 子页面（https://child.com） -->
+<script>
+  // 监听父页面消息
+  window.addEventListener('message', (e) => {
+    // 验证发送方域名
+    if (e.origin !== 'https://parent.com') return;
+    console.log('收到父页面消息：', e.data);
+
+    // 回复父页面
+    e.source.postMessage(
+      { type: 'reply', data: 'Hello from child' },
+      e.origin // 使用父页面的origin作为目标
+    );
+  });
+</script>
+```
+
+- 
+- websocket 原理：协议本身不限制跨域
+
+## http和https的差别
+|区别|http|https|
+|---|---|---|
+|安全性|无加密，明文|基于SSL/TSL 数据传输安全|
+|核心机制|数据传输，无安全层|3大核心能力：1.身份验证 2数据加密 3.完整性校验|
+|端口|默认使用80|默认使用443|
+|数据传输|明文传输|加密传输|
+|证书要求|无需证书|必须安装CA|
+|性能开销|无额外开销|需要SSL/TLS握手，有轻微性能损耗|
+|SEO权重|搜索引擎权重较低||
+
 ## http 强缓存和协商缓存
 
 1. 什么是 http 缓存？作用是什么？
    是浏览器为了减少网络请求，提升页面加载速度而对服务器响应资源进行本地存储的机制。
-
 2. 强缓存和协商缓存的核心区别
 
 - 强缓存，从本地读取缓存，不再向服务端发起请求
@@ -19,7 +99,6 @@
 - expires
 - - 格式 `Expires:Wed,21 Oct 2025 07:28:00 GMT`（服务器的绝对时间）
 - - 问题依赖客户端和服务器时间同步
-
 - cache-control
 - 格式 `Cache-Control:max-age=5000`(相对于服务器请求时间)
 - 常用指令
@@ -140,6 +219,7 @@ XSS（Cross-Site Scripting，跨站脚本攻击）是一种常见的 Web 安全�
   - 页面通过 JavaScript 读取 URL 参数（如`locaton.hash`）并直接插入 DOM（`document.innerHTML=location.hash`）
   - 攻击者构建含恶意脚本的 URL（如`http://example.com/#<script>xss()<script> `）,用户点击后，客户端脚本直接将恶意代码插入 DOM 并执行。
 - 核心：服务器未参与，漏洞在客户端对用户输入的处理逻辑。
+- 例子：`input获取值后复制给innerHtml`
 
 ### 危害
 
@@ -152,7 +232,6 @@ XSS（Cross-Site Scripting，跨站脚本攻击）是一种常见的 Web 安全�
 
 1. 输入验证与过滤
    对用户输入内容（评论、表单、url 参数）进行严格校验，过滤危险字符和标签
-
 2. 输出编码
    当需要将用户输入的内容展示到页面，对内容进行编码处理，让浏览器将其当作“文本”而非“代码”解析：
 
@@ -190,7 +269,6 @@ XSS 的核心是“恶意脚本注入执行”，防御需结合输入过滤（�
 - 前提条件：
   用户已在目标网站（如银行网站）完成登录，持有有效的身份认证信息（如 Cookie、Session）。
   攻击者通过诱导（如邮件、恶意链接、嵌入在第三方网站的图片 / 表单）让用户触发一个针对目标网站的请求。
-
 - 攻击流程：
   用户登录 A 网站（受信任网站），服务器生成 Session 并通过 Cookie 存储用户身份。
   用户未退出 A 网站时，访问了攻击者控制的 B 网站（恶意网站）。
@@ -283,6 +361,86 @@ CRSF 原理是**滥用用户身份**，核心**是让服务器区分哪些请求
 - 处理逻辑耗时过长，未在规定时间返回
 - 代理服务器和后端服务器之间的网络链路不稳定，导致响应传输被阻塞。
 
+## Http 常见的响应头
+
+### `Content-Disposition`
+
+作用：
+
+- 1.控制内容的处理方式:决定是‘在线打开’（如网页、图片、PDF），还是“下载保存”；
+- 指定下载文件名：当内容需要下载，可以通过该头指定文件的默认名称（用户可在保存时修改）
+
+关键参数
+
+- inline(默认值)，浏览器在线打开。
+- attachment。将内容下载。
+- filename：指定下载文件的默认名称
+
+### `Content-Type`
+
+文本类（text/\*）
+
+
+| Content-Type    | 用途说明     |
+| --------------- | ------------ |
+| text/html       | HTML 文档    |
+| text/plain      | 无格式纯文本 |
+| text/css        | css          |
+| text/javascript | javascript   |
+| text/xml        | XML 格式     |
+
+图片类（image/\*）
+
+
+| Content-Type  | 用途说明                                |
+| ------------- | --------------------------------------- |
+| image/jpeg    | JPEG（有损，适合图片）                  |
+| image/png     | PNG（无损，支持透明）                   |
+| image/gif     | gif 格式图片                            |
+| image/svg+xml | svg 矢量图（可缩放、文本格式）          |
+| text/webp     | WebP 格式图片（高效压缩，坚固质量体积） |
+
+应用类（application/\*）
+用于表示复杂格式的数据（如二进制、结构化数据等），是 API 交互和文件传输中最常用的类别。
+
+
+| Content-Type                      | 用途说明                                        | 典型场景                           |
+| --------------------------------- | ----------------------------------------------- | ---------------------------------- |
+| application/json                  | JSON 格式数据（键值对结构，轻量）               | API                                |
+| application/x-www-form-urlencoded | 表单数据（键值对用 & 连接，值经 URL 编码）      | 普通表单（默认 enctype）           |
+| multipart/form-data               | 多部分表单数据（支持二进制文件、键值对混合）    | 上传文件表单（需显示指定 enctype） |
+| application/pdf                   | PDF 文档（便携文档格式）                        | 下载/在线查看 pdf                  |
+| application/zip                   | ZIP 压缩文件（多文件打包）                      | 下载压缩包                         |
+| application/octet-stream          | 未知二进制流（通用二进制类型）                  | 下载未知格式二进制（.bin .exe）    |
+| application/javascript            | JavaScript 代码（新标准，替代 text/javascript） | 现在网页脚本文本                   |
+| application/xml                   | XML 格式数据（结构化标记，比 text/xml 更严格）  | 复杂数据交换                       |
+
+多媒体(audio/_ video/_)
+
+
+| Content-Type | 用途说明                           | 典型场景          |
+| ------------ | ---------------------------------- | ----------------- |
+| audio/mpeg   | MPEG 音频（如 MP3 格式）           | 播放 MP3 音频文件 |
+| audio/wav    | WAV 音频（无损格式，体积较大）     | 原始音频          |
+| video/mp4    | MP4 视频（主流视频格式，兼容性好） | 网页播放 MP4 视频 |
+| video/mpeg   | MPEG 视频（如 VCD、DVD 格式）      | 传统视频文件      |
+
+注意：
+
+1. 表单提交的区别：
+   - 普通表单用`application/x-www-urlencoded`
+   - 含文件表单必须用`multipart/form-data` 并在表单中指定`enctype='multipart/form-data' `
+2. JSON 和 js 区别
+   - JSON(字符串)
+   - js 用于传递可执行 js 代码
+3. 二进制通用类型 `application/octet-stream`（默认触发下载）
+
+错误指定`Content-Type`,res 时候
+
+- text->binary 转成 blob
+- binary->text 乱码
+- 请求的时候，表单->json 获取空 json
+
 ## http2.0
 
 ### 一、协议格式与解析效率
@@ -295,7 +453,6 @@ CRSF 原理是**滥用用户身份**，核心**是让服务器区分哪些请求
 - HTTP/1.1
 - - 持久连接（Keep-Alive）。允许在同一 TCP 连接上发送多个请求，但需按顺序处理，存在队头阻塞问题
 - - 并发限制：浏览器对同一域名通常限制 6~8 个并发连接，需通过多域名分片缓解，但会增加 DNS 查询和连接开销。
-
 - HTTP2
 - - 多路复用：单连接上并行处理多个请求 / 响应，彻底消除队头阻塞。例如，一个 TCP 连接可同时传输 HTML、CSS、JS 等资源，无需等待前一个请求完成。
 - - 流优先级：客户端可为每个流设置优先级（如优先加载关键 CSS），服务器按优先级调度资源，优化渲染顺序。
@@ -310,6 +467,7 @@ CRSF 原理是**滥用用户身份**，核心**是让服务器区分哪些请求
 - HTTP/1.1 客户端需显式请求每个资源。例如，加载 HTML 后需单独请求 CSS 和 JS，增加延迟。
 - HTTP/2 支持服务器推送（Server Push）：服务器可主动推送客户端可能需要的资源（如 CSS、JS）。例如，发送 HTML 时同时推送关联的 CSS，减少客户端请求次数，加快页面加载速度。
 
+
 | 区别         | http1                           | http2                                                |
 | ------------ | ------------------------------- | ---------------------------------------------------- |
 | 页面加载时间 | 依赖多连接和管道化，延迟较高    | 多路复用减少延迟，典型场景提升 20%                   |
@@ -319,6 +477,63 @@ CRSF 原理是**滥用用户身份**，核心**是让服务器区分哪些请求
 | 场景         | 简单静态                        | 视频流、实时通信等性能敏感场景，挑战是：需配置 HTTPS |
 
 ### 总结
+
 http2 采取多路复用、头部压缩、服务端推送和 TLS 加密的特性，显著提升了性能和安全。
 
-## SVG和Canvas的区别对比
+## 垃圾回收机制
+
+GC 是 Garbage Collection,程序过程中会产生很多 垃圾,这些垃圾是程序不再使用的内存或者一些不可达的对象,而 GC 就是负责回收垃圾的,找到内存中的垃圾、并释放和回收空间。
+
+在浏览器的发展历史上,用到过两种主要的标记策略:**标记清理** 和 **引用计数**。
+
+### 引用计数
+
+引用计算的核心思想是对**每个值都记录它被引用的次数。声明变量并给他赋一个引用值时,这个值的应用数为 1。**
+如果同一个值又被赋给另一个变 量，那么引用数加 1。类似地，如果保存对该值引用的变量被其他值给覆盖了，那么引用数减 1。当一 个值的引用数为 0 时，就说明没办法再访问到这个值了，因此可以安全地收回其内存了。垃圾回收程序 下次运行的时候就会释放引用数为 0 的值的内存。
+
+- 问题：循环引用
+- 缺点：时间开销大，需要维护引用数；无法解决循环引用的问题。
+
+### 标记清理
+
+引擎在执行 标记清除算法 时,需要从出发点去遍历内存中所有对象去打标志,而这个出发点就是 根对象,在浏览器中你可以理解为 windows,整个标记清除算法大致过程就像下面这样:
+
+1. 垃圾收集器在运行时会给内存中的所有变量都加上一个标记,假设内存中所有对象都是垃圾,全标记为 0;
+2. 然后从 根对象 开始深度遍历,把不是垃圾的节点改成 1;
+3. 清除所有标记为 0 的垃圾,销毁并回收它们所占用的内存空
+4. 最后把内存中的所有对象标志修改为 0,等待下一轮垃圾回收;
+
+### v8 的 GC
+
+思想：使用**分代式垃圾回收策略**。存活时间短的对象-新生代，存活时间长-老生代。
+
+#### 新生代垃圾回收
+
+原理：采用复制方法实现垃圾回收。将空间分为 `from` 和 `to`。处于使用的是`from`.空闲是`to`.
+
+过程：当分配对象时是在`from`分配；回收时，检查`from`的存活对象，存活的会被复制到`to`，非存活的空间会被释放。然后对`from`和`to`进行空间翻转。但在`from`复制到`to`之前，会对对象进行检查，将存活周期长的移到老生代中，完成对象晋升。
+
+晋升条件：
+
+- 是否经历过`Scavenge`回收。
+- to 的空间内存占用超过限制。
+  ![alt text](image-2.png)
+
+#### 老生代垃圾回收
+
+老生代采用了 Mark-Sweep(标记清除) 和 Mark-compact(标记整理)。
+
+- Mark-Sweep
+- 阶段：分为标记和清除两个阶段。
+- 过程：在标记阶段遍历堆中的所有对象,并标记活着的对象,在随后的清除阶段中,只清除没有被标记的阶段。
+- 特点：只清除死亡对象。
+- 缺点：清除后，造成内存空间不连续的状态。
+- Mark-Compact
+- 特点：在于对象在标记为死亡后,在整理的过程中,将活着的对象往一端移动,移动完成之后,直接清理边界外的内存。
+
+#### 全停顿（stop the world）
+
+- 概念：都需要用 js 引擎，垃圾回收的 3 种基本算法都需要将应用逻辑停下来,得执行完垃圾回收后再恢复执行应用逻辑,这种行为被称为 全停顿(stop-the-world)。
+- 解决方案： V8 先从标记阶段入手,原本一次停顿完成的动作改为增量标记,也就是**拆分为许多小 步进**,每做完一 步进 就让 JavaScript 引用逻辑执行一小会儿,垃圾回收与应用逻辑交替执行直到标记阶段完成,
+
+## SVG 和 Canvas 的区别对比

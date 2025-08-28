@@ -342,7 +342,146 @@ wss.on("connection", () => {
 
 1.根据设计稿与屏幕比列，得出根的 fontsize 也就是 rem。然后窗口改变重新计算。 2.通过`postcss-pxtorem`进行 px 转换。
 
+## 浏览器渲染过程
+
+### 每一帧的浏览器渲染过程的顺序为：
+
+![alt text](image.png)
+
+1.  用户事件
+2.  一个宏任务
+3.  队列中全部微任务
+4.  requestAnimationFrame
+5.  浏览器的重排/重绘
+6.  requestIdleCallback
+
+### LongTask
+
+主线程执行时间超过 50ßms 的任务即为 Long Task
+
+- 解决：基于 PerformanceObserver
+
+```js
+// 1. 检查浏览器兼容性（现代浏览器均支持，IE不支持）
+if (
+  window.PerformanceObserver &&
+  PerformanceObserver.supportedEntryTypes.includes("longtask")
+) {
+  // 2. 创建Long Task监听器
+  const longTaskObserver = new PerformanceObserver((entryList) => {
+    // 3. 遍历所有捕获到的Long Task entry
+    entryList.getEntries().forEach((longTaskEntry) => {
+      // 4. 提取Long Task核心信息
+      const longTaskInfo = {
+        // 任务时长（必>50ms）
+        duration: longTaskEntry.duration.toFixed(2) + "ms",
+        // 任务开始时间（相对于页面导航）
+        startTime: longTaskEntry.startTime.toFixed(2) + "ms",
+        // 任务来源归因（关键：定位Long Task的产生原因）
+        sources: longTaskEntry.attribution.map((attr) => ({
+          type: attr.type, // 来源类型：如"script"（JS执行）、"layout"（布局计算）等
+          name: attr.name, // 来源名称：如脚本URL、DOM元素ID等
+          startTime: attr.startTime.toFixed(2) + "ms", // 来源任务的开始时间
+        })),
+        // 任务归属页面（区分主页面和iframe）
+        owner: longTaskEntry.name,
+      };
+
+      // 5. 处理Long Task信息（打印/上报）
+      console.warn("捕获Long Task：", longTaskInfo);
+      // 实际项目中：上报到服务端（如通过axios/postMessage）
+      // reportToServer('longtask', longTaskInfo);
+    });
+  });
+
+  // 6. 启动监听：指定监听"longtask"类型
+  longTaskObserver.observe({ entryTypes: ["longtask"] });
+
+  // （可选）页面卸载前停止监听，避免内存泄漏
+  window.addEventListener("beforeunload", () => {
+    longTaskObserver.disconnect();
+  });
+} else {
+  console.warn("当前浏览器不支持Long Task监听");
+}
+```
+
+- 消除 longtask
+- 场景 1 长时间 JS 执行
+1. 用 web workers 拆分计算密集型任务
+2. requestIdleCallback 处理非紧急任务
+```js
+// 待处理的日志队列
+const logQueue = [/* 大量日志数据 */];
+
+// 空闲时处理日志（每次处理 10 条，避免单次耗时过长）
+function processLogs(deadline) {
+  // deadline.timeRemaining()：当前空闲时间（毫秒）
+  while (deadline.timeRemaining() > 0 && logQueue.length > 0) {
+    const log = logQueue.shift();
+    // 处理单条日志（如上报）
+    reportLog(log);
+  }
+
+  // 若队列未空，下一次空闲时继续处理
+  if (logQueue.length > 0) {
+    requestIdleCallback(processLogs);
+  }
+}
+
+// 启动空闲任务处理
+requestIdleCallback(processLogs);
+```
+3. 拆分长循环
+```js
+// 原始长循环（可能耗时 >50ms，产生 Long Task）
+function badLoop() {
+  let result = [];
+  for (let i = 0; i < 10000; i++) {
+    result.push(heavyCalculation(i)); // 每次循环有耗时计算
+  }
+}
+
+// 优化：拆分循环，用 requestAnimationFrame 间隔执行
+function optimizedLoop(total, batchSize = 100) {
+  let current = 0;
+  let result = [];
+
+  // 每次处理一个批次
+  function processBatch() {
+    const end = Math.min(current + batchSize, total);
+    for (; current < end; current++) {
+      result.push(heavyCalculation(current));
+    }
+
+    // 若未处理完，下帧继续
+    if (current < total) {
+      requestAnimationFrame(processBatch);
+    } else {
+      console.log("循环完成：", result);
+    }
+  }
+
+  // 启动批次处理
+  processBatch();
+}
+
+// 调用：处理 10000 次循环，每次批量 100 次
+optimizedLoop(10000, 100);
+```
+
+- 场景2:强制同步布局/重绘
+“强制同步布局” 指：先读取 DOM 布局属性（如 offsetWidth、getBoundingClientRect），再立即修改 DOM 样式，导致浏览器被迫重新计算布局（耗时），若频繁执行（如循环中），会产生 Long Task。
+
+核心思路：先 “批量读取” 布局属性，再 “批量修改” 样式，避免读写交替。
+
 ## Html-dom 的渲染过程
+
+- 场景3:大量DOM操作
+核心思路：减少 DOM 操作次数，用 “离线 DOM” 或 “虚拟列表” 优化。
+
+- 场景4:第三方急哦啊笨
+核心思路：让第三方脚本 “异步加载”，避免阻塞主线程。
 
 输入 ip，dns 解析，http 三次握手建立链接，收到资源，浏览器解析 html 文档，经历布局，绘制，光栅化（将 dom 元素转化为位图）
 

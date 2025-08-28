@@ -27,6 +27,10 @@ const webpackCofig = [
     link: "front-eng/CICD",
   },
   {
+    text: "性能优化",
+    link: "front-eng/Optimization",
+  },
+  {
     text: "Vite",
     link: "front-eng/vite-index",
   },

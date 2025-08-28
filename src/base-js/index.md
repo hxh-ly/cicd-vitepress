@@ -314,6 +314,146 @@ console.log(clonedObj.f instanceof Date); // true（日期类型保留）
 console.log(clonedObj.g instanceof RegExp); // true（正则类型保留）
 ```
 
+## 原型
+
+### 原型的基本概念
+
+- 原型对象：：每个对象在创建时，都会关联一个 “原型对象”（简称 “原型”）。这个原型对象本身也是一个对象，**存储着可被当前对象共享的属性和方法**。例如（Array.prototype，里面有 push、pop 等）
+- `__proto__`: 每个对象（null）都有一个隐藏**proto**，用于指向原型对象 `const arr=[];arr_proto__ === Array.prototype`
+- prototype:只有“构造函数”才有 prototype，它指向“该构造函数创建的所有实例的原型对象” `Array是构造函数`
+
+### 构造函数、实例、原型对象的三角关系
+
+这三者的关系是理解原型的核心，可用一句话概括：构造函数通过 prototype 指向原型对象，原型对象通过 constructor 指向构造函数，实例通过 `__proto__` 指向原型对象。
+![alt text](image.png)
+
+### 原型链
+
+当访问一个对象的属性和方法时，遵循以下规则：
+
+1. 先在对象自身查找，如果找到则直接使用；
+2. 如果没找到，就通过 **proto** 去原型对象中查找；
+3. 如果原型对象中也没找到，就继续通过原型对象的 **proto** 向上查找（即原型的原型）；
+4. 直到找到顶层原型 Object.prototype，如果仍未找到，则返回 undefined。
+   这种 “层层向上查找” 的链式结构，称为原型链。原型链的终点是 Object.prototype.**proto**，其值为 null（表示没有更上层的原型）。
+
+- 数组、函数等特殊对象的原型链。 `[].__proto__===Array.prototype` `Array.prototype.__proto__ === Object.prototype` `Object.prototype.__proto__===null`
+
+### 核心作用
+
+1. 实现属性和方法的共享。将公共方法定义在原型上，所有实例无需重复创建。
+2. 实现继承：通过修改原型指向，让一个构造函数的实例**继承另一个构造函数的原型方法**。
+
+```js
+function Student() {}
+Student.prototype = new Person(); // 让Student的原型指向Person的实例（继承Person的原型方法）
+Student.prototype.constructor = Student;
+修复constructor指向;
+```
+
+3. 扩展内置对象功能
+
+```js
+Array.prototype.sum = function () {
+  return this.reduce((a, b) => a + b, 0);
+};
+[1, 2, 3].sum(); // 6
+```
+
+### 继承的实现
+
+#### 原型链继承
+
+- 缺点
+- - 1. 子实例会共享父类实例的引用类型属性(`c1.arr.push(3)`)会导致其他子实例的 arr 也被修改。
+- - 2. 子无法在构造的时候向父构造传递参数
+
+```js
+function Parent() {
+  this.name = "父类";
+  this.arr = [1, 2]; // 引用类型属性
+}
+Parent.prototype.sayHi = function () {
+  console.log("Hi");
+};
+
+function Child() {}
+
+// 核心：子类原型指向父类实例
+Child.prototype = new Parent();
+Child.prototype.constructor = Child; // 修复 constructor 指向
+
+// 测试
+const c1 = new Child();
+c1.name; // "父类"（访问父类实例属性）
+c1.sayHi(); // "Hi"（访问父类原型方法）
+```
+
+#### 构造函数继承
+
+原理：在子类构造函数中通过 Parent.call(this, ...args) 调用父类构造函数，手动将父类实例属性绑定到子类 this 上。
+
+缺点：无法共享父原型的方法`Person.prototype.sayHi`
+
+```js
+function Parent(name) {
+  this.name = name;
+  this.arr = [1, 2];
+}
+Parent.prorotype.sayHi = () => {};
+function Child(name, age) {
+  Parent.call(this, name); // 关键：调用父类构造函数，继承实例属性
+  this.age = age;
+}
+
+// 测试
+const c1 = new Child("张三", 18);
+const c2 = new Child("李四", 20);
+c1.arr.push(3);
+console.log(c1.arr); // [1,2,3]
+console.log(c2.arr); // [1,2]（引用类型不再共享，解决原型链继承的问题）
+```
+
+#### 寄生组合继承
+
+原理：结合 “原型链继承”（继承原型方法）和 “构造函数继承”（继承实例属性），并优化原型链避免冗余。
+
+```js
+function Parent(name) {
+  this.name = name;
+  this.arr = [1, 2];
+}
+Parent.prototype.sayHi = function() => { console.log(this.name) };
+function Child(name) {
+  Parent.call(this, name); // 构造函数继承，继承父的属性和方法
+  this.childProps = "xxx";
+}
+// 核心：让子类原型继承父类原型（而非父类实例），避免继承父类实例属性
+const parentType = Object.create(Parent.prototype);
+Child.prototype = parentType;
+Child.prototype.constrcutor = Child;
+
+let o1 = new Child('o1');
+o1.arr.push('o1') // [1.2,o1]
+o1.sayHi(); // o1
+let o2 = new Child('o2')
+o2.arr.push('o2') // [1,2,o2]
+o2.sayHi(); // o2
+```
+
+### new 的过程
+
+创建对象 -> 关联构造函数的原型 -> 绑定 this 执行构造函数 -> 返回对象
+
+```js
+function myNew(fn,...args) {
+  let obj = {};
+  obj.__proto__ = Object.create(fn.prototype);
+  fn.apply(obj,args)
+  return obj;
+}
+```
+
 ## 防抖和截流
 
 ### 防抖
@@ -613,8 +753,11 @@ concurrent(taskList).then((res) => {
 ```
 
 ### 柯里化
+
 核心思想：参数满足长度后才执行，不然一致递归返回函数，闭包收集参数
-- this指向，记得在`returnFunc`保存`this`，`结合箭头函数`和`apply`绑定第一层的this
+
+- this 指向，记得在`returnFunc`保存`this`，`结合箭头函数`和`apply`绑定第一层的 this
+
 ```js
 function curry(func) {
   let totalCount = func.length;
