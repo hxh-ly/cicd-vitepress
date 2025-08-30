@@ -364,46 +364,55 @@ var permute = function (nums) {
 ## lc.51.N皇后问题
 ![alt text](./img/image07.png)
 皇后不能放在同行同列同斜线中，可以使用全排列枚举。
+
 `col[i]`表示第 i 行，皇后放置在哪一列
-`on_path[i]`表示 i 行已经填入。
-`diag1`用于表示斜边 左上角已占用。如 diag1[r+c]
-`diag2`用于表示斜边 右下角已占用。如 diag2[r-c + n ] 因为 r-c 可能是负数，所以要+n。
+
+`on_path[i]`表示 i 列已经填入。
+
+`diag1`用于表示斜边 左上角已占用。如 diag1[r+c] （左上到右下）
+
+`diag2`用于表示斜边 右下角已占用。如 diag2[r-c + n ] 因为 r-c 可能是负数，所以要+n。 （右上到左下）
+
+思想：`dfs`遍历行，尝试列，刷新左上角和右上角 
 
 ```js
+/**
+ * @param {number} n
+ * @return {string[][]}
+ */
 var solveNQueens = function (n) {
-  let col = Array(n).fill(0);
-  let on_path = Array(n).fill(0);
-  let m = 2 * n - 1;
-  let diag1 = Array(m).fill(0);
-  let diag2 = Array(m).fill(0);
-  let ans = [];
-  function dfs(r) {
-    if (r === n) {
-      // 构造答案
-      let t = Array(n)
-        .fill(0)
-        .map(() => Array(n).fill("."));
-      col.forEach((c, r) => {
-        t[r][c] = "Q";
-      });
-      ans.push(t.map((v) => v.join("")));
-      return;
+    let col = Array(n).fill(0)
+    let on_path = Array(n).fill(0)
+    let m = 2 * n - 1;
+    let diag1 = Array(m).fill(0);
+    let diag2 = Array(m).fill(0);
+    let ans = [];
+    function dfs(r) {
+        if (r === n) {
+            //构造答案
+            let t = Array(n).fill(0).map(() => Array(n).fill('.'))
+            col.forEach((c, r) => {
+                t[r][c] = 'Q'
+            })
+            ans.push(t.map(v => v.join('')));
+            return;
+        }
+
+        for (let c = 0; c < n; c++) {
+            if (!on_path[c] && !diag1[r + c] && !diag2[r - c + n]) {
+                col[r] = c;
+                on_path[c] = 1;
+                diag1[r + c] = 1;
+                diag2[r - c + n] = 1;
+                dfs(r + 1);
+                on_path[c] = 0;
+                diag1[r + c] = 0;
+                diag2[r - c + n] = 0;
+            }
+        }
     }
-    // 遍历列
-    for (let c = 0; c < n; c++) {
-      if (!on_path[c] && diag1[c + r] && diag2[c - r + n]) {
-        on_path[c] = 1;
-        col[r] = c;
-        diag1[c + r] = 1;
-        diag2[c - r + n] = 1;
-        dfs(r + 1); // 递归行，全排列
-        on_path[c] = 0;
-        diag1[c + r] = 0;
-        diag2[c - r + n] = 0;
-      }
-    }
-  }
-  dfs(0);
+    dfs(0)
+    return ans;
 };
 ```
 
