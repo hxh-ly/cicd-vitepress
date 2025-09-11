@@ -63,6 +63,7 @@ const leetdCode = [
   { text: "回溯", link: "leetcode/backTracking/index" },
   { text: "排序算法", link: "leetcode/sort/index" },
   { text: "滑动窗口", link: "leetcode/window/index" },
+  { text: "二分查找", link: "leetcode/search/index" },
 ];
 const backEndConfig = [
   { text: "后端", link: "back-end/index" },
