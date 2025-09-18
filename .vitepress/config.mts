@@ -69,6 +69,7 @@ const backEndConfig = [
   { text: "后端", link: "back-end/index" },
   { text: "redis", link: "back-end/redis" },
   { text: "nest文件上传", link: "back-end/nest_upload" },
+   { text: "nest", link: "back-end/nest" },
 ];
 const mobileConfig = [
   { text: "web-适配", link: "mobile/rem.md" },

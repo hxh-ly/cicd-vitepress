@@ -97,3 +97,16 @@ export class AppService{
   }
 }
 ```
+
+### redis 配置
+
+```js
+// 
+const client = createClient({
+  url: `redis://${
+    config.password
+      ? `${config.username}:${encodeURIComponent(config.password)}@`
+      : ""
+  }${config.host}:${config.port}`,
+});
+```
