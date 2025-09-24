@@ -69,7 +69,8 @@ const backEndConfig = [
   { text: "后端", link: "back-end/index" },
   { text: "redis", link: "back-end/redis" },
   { text: "nest文件上传", link: "back-end/nest_upload" },
-   { text: "nest", link: "back-end/nest" },
+  { text: "nest", link: "back-end/nest" },
+  { text: "Docker", link: "back-end/docker" },
 ];
 const mobileConfig = [
   { text: "web-适配", link: "mobile/rem.md" },
@@ -100,7 +101,7 @@ export default withMermaid(
     vite: {
       assetsInclude: ["**/*.awebp"],
     },
-    base: process.env.BASE_PATH || "",
+    base: process.env.BASE_PATH || "/blog",
     title: "axuaxu",
     description: "知识体系，技能树",
     srcDir: "./src",
