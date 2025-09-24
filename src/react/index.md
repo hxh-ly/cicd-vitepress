@@ -153,10 +153,12 @@ function Parent() {
   );
 }
 ```
+
 注意事项：
+
 - 避免面频繁使用`toJS()` 大型数据可能导致性能问题。
 - 嵌套结构修改`setIn`：对于多层嵌套的`Map`和`List`，优先使用`setIn/updateIn`而非多次`get`+`set`
-- 与Redux配合，`state`通常设计为不可变，可用Immutable的`Map/List`作为state容器，reducer中通过`set/update`等方法返回新的state，配合`reselect`库进一步优化性能。
+- 与 Redux 配合，`state`通常设计为不可变，可用 Immutable 的`Map/List`作为 state 容器，reducer 中通过`set/update`等方法返回新的 state，配合`reselect`库进一步优化性能。
 
 ## useCallback 和 useMemo
 
@@ -369,13 +371,14 @@ function App(){
 
 ## 4.React 与 Angular/Vue 的核心区别（如数据绑定，DOM 操作、架构设计）
 
-| 区别     | React                         | Angular          | Vue               |
-| -------- | ----------------------------- | ---------------- | ----------------- |
-| 数据绑定 | 单向数据流                    | 默认双向数据绑定 | 双向绑定+单向支持 |
-| DOM 操作 | 基于 vdom                     | 真实 Dom         | 基于 vdom         |
-| 架构设计 | 仅关注 view，其他依赖社区生态 | 全家桶           | 提供渐进式框架    |
-| 模版语法 | JSX                           | 模版语法+装饰器  | 模版语法+可选 JSX |
-|选型| 大型复杂应用,团队熟悉函数式编程、需要跨端能力 |xx| 中小型/快速迭代 需要渐进式开发，对“约定大于配置” |
+| 区别     | React                                         | Angular          | Vue                                              |
+| -------- | --------------------------------------------- | ---------------- | ------------------------------------------------ |
+| 数据绑定 | 单向数据流                                    | 默认双向数据绑定 | 双向绑定+单向支持                                |
+| DOM 操作 | 基于 vdom                                     | 真实 Dom         | 基于 vdom                                        |
+| 架构设计 | 仅关注 view，其他依赖社区生态                 | 全家桶           | 提供渐进式框架                                   |
+| 模版语法 | JSX                                           | 模版语法+装饰器  | 模版语法+可选 JSX                                |
+| 选型     | 大型复杂应用,团队熟悉函数式编程、需要跨端能力 | xx               | 中小型/快速迭代 需要渐进式开发，对“约定大于配置” |
+
 选型：
 
 ## 5.解释 React 的“单向数据流”特性以其实践意义
@@ -420,22 +423,31 @@ function App(){
 ## 8.解释 React 的“组件即函数”理念（函数组件和类组件的本质区别）
 
 理念：
-1. React 组件本质上是一个接受输入（props）并返回输出（UI 描述）的函数。 
-2. 组件的核心职责是：props -> UI 
-3. 组件应该是纯净的：相同输入总是产生相同输出 
+
+1. React 组件本质上是一个接受输入（props）并返回输出（UI 描述）的函数。
+2. 组件的核心职责是：props -> UI
+3. 组件应该是纯净的：相同输入总是产生相同输出
 4. 组件应该是可组合的：像函数一样可以嵌套组合
 
-本质区别： 
+本质区别：
+
 - 1.语法和结构
 - - 函数组件：一个普通的 javascript 函数，接受 props 作为参数并返回 jsx。没有生命周期方法、this
-- - 类组件：基于 ES6 类定义，继承自 React.Component,需要手动实现 render 方法，并使用 this.state 和 this.setState 管理状态。 
+- - 类组件：基于 ES6 类定义，继承自 React.Component,需要手动实现 render 方法，并使用 this.state 和 this.setState 管理状态。
 - 2.生命周期管理：
 - - 类组件：类组件有内建的生命周期方法，可以在这些方法中执行异步操作、更新状态等。例如 `componentDidMount` `componentWillUnmount`
-- - 函数组件：函数组件没有生命周期方法，但通过 React Hooks（如 useEffect）引入函数组件的副作用处理，使函数组件具备类似类组件的生命周期管理功能。useEffect 允许我们在组件挂载、更新和卸载时执行副作用。 
+- - 函数组件：函数组件没有生命周期方法，但通过 React Hooks（如 useEffect）引入函数组件的副作用处理，使函数组件具备类似类组件的生命周期管理功能。useEffect 允许我们在组件挂载、更新和卸载时执行副作用。
 - 3.状态管理
 - - 类组件：使用 this.state 来管理状态，使用 this.setState 来更新状态。setState 是异步的，并且会触发组件的重新渲染。
 - - 函数组件：函数组件原本是无状态的，但随着 React Hooks 的引入，useState 使得函数组件也可以使用状态管理。
-  总结：React 的“组件即函数”理念，意味着 React 组件可以简单地用函数实现，而无需依赖复杂的类继承结构。函数组件通过其简洁的结构、易于理解的 API 和性能优势吗，成为现代 React 开发的首选方式。
+    总结：React 的“组件即函数”理念，意味着 React 组件可以简单地用函数实现，而无需依赖复杂的类继承结构。函数组件通过其简洁的结构、易于理解的 API 和性能优势吗，成为现代 React 开发的首选方式。
+
+### 为什么要有 React Hooks
+
+- 类组件复用问题。需要通过（HOC、Render Props）。缺点是可能形成嵌套地域。
+- 类组件逻辑分散。（数据获取、加载状态、错误处理）分散在不同的生命周期`ComponentDidMount componentDidUpdate ComponentWillUnMount`
+- this 指向陷阱。需要显示`bind`或者使用箭头函数保证正确。
+- 函数式组件的缺陷。只能渲染纯 UI 展示组件。
 
 ## 9.React 的严格模式（Strict Mode）解决了哪些潜在问题？
 
@@ -858,31 +870,40 @@ class ErrorBoundary extends React.Componnet {
 }
 ```
 
-## setState的核心实现
+## setState 的核心实现
+
 ### 用法
+
 1. 对象形式:`this.setState({ key: newValue })`
 2. 函数形式:`this.setState((prevState, props) => ({ key: prevState.key + 1 }))`
-第二个可选参数是回调函数：`this.setState(updater, callback)`在状态更新完成且组件重新渲染后执行（用于获取最新状态）。
+   第二个可选参数是回调函数：`this.setState(updater, callback)`在状态更新完成且组件重新渲染后执行（用于获取最新状态）。
+
 ### 核心原理
-并非直接修改`this.state`并立即更新DOM，而是通过一套**状态更新机制+批处理**的机制实现。
+
+并非直接修改`this.state`并立即更新 DOM，而是通过一套**状态更新机制+批处理**的机制实现。
 核心流程：
-1. 状态更新入队（不直接修改this.state)。不是直接更新，而是将传入的“状态更新描述”入队。目的是
+
+1. 状态更新入队（不直接修改 this.state)。不是直接更新，而是将传入的“状态更新描述”入队。目的是
+
 - 避免频繁修改状态导致频繁渲染
 - `this.state`本身是一个只读快照，`this.state={}`不会触发重新渲染
-  
+
 2. 批处理更新策略（异步性的核心）
-  将多个`setState`调用的更新请求**批处理合并** 然后一次性处理，最终只触发一次渲染。
+   将多个`setState`调用的更新请求**批处理合并** 然后一次性处理，最终只触发一次渲染。
+
 - 何时批量更新？
-- - React控制场景下（合成事件回调、生命周期方法）`setState`是异步的。
-- - 非React控制场景下 `setTimeout 原生事件回调` `setState`是同步的。
+- - React 控制场景下（合成事件回调、生命周期方法）`setState`是异步的。
+- - 非 React 控制场景下 `setTimeout 原生事件回调` `setState`是同步的。
 - 批处理更新的实现？ 通过**事务机制标记当前是否处于“批量更新模式”**，是，更新请求被暂存；离开模式，一次性处理暂存的更新。
 
 3. 状态合并与计算
+
 - 对象浅合并
 - 函数，返回值作为下一个函数的输入值
 
 4. 触发更新
-- 计算完成后，React会触发组件的重新渲染流程。`shouldComponentUpdate` `render` `reconcile` `commit`
+
+- 计算完成后，React 会触发组件的重新渲染流程。`shouldComponentUpdate` `render` `reconcile` `commit`
 
 ## 26.函数组件和类组件的区别以及选型建议
 
@@ -2753,10 +2774,97 @@ GraphQL 对 React 应用数据获取的优化核心在于：
 - 核心差异：RN 与 Web React 的本质区别在于渲染目标（原生组件 vsDOM），导致组件集，样式系统，API 设计，性能瓶颈不同
 - 跨平台实践：通过共享业务逻辑、抽象平台差异、使用跨平台库，在保证用户体验的前提下最大化代码复用。关键是“逻辑共享。UI 适配”
 
-## zustand优点
-- api极简，学习成本低
-- 与hook深度融合 `useStore((state)=>({count:state.count}))`
+## zustand 优点
+
+- api 极简，学习成本低
+- 与 hook 深度融合 `useStore((state)=>({count:state.count}))`
 - 自动优化性能，减少不必要渲染（自动跟踪组件依赖的状态字段）
-- 灵活性高，支持多场景扩展（多store、中间件、兼容不可变数据）
+- 灵活性高，支持多场景扩展（多 store、中间件、兼容不可变数据）
 - 轻量无依赖，项目体积良好
-- 良好的ts支持
+- 良好的 ts 支持
+
+### React hooks 的实践
+
+常见问题
+
+### 闭包陷阱
+
+期望获取最新变量值，但实际获取的是该变量在函数创建时的“过时”的值
+
+```js
+for (var i = 0; i < 3; i++) {
+  setTimeout(function () {
+    console.log(i); // 输出三个 3，而不是 0, 1, 2
+  }, 100);
+}
+
+// 解释：1 useEffect在函数执行被定义和执行，2 然后创建了闭包，它“记住”此刻count的值0. 3.即使count增加，回调函数仍然是最初的那个函数看到的count永远是被闭包捕获的那个初始值“0”
+// 解决：1.正确依赖，销毁旧的，重新创建新的effect（和新的定时器）；2. 函数值更新，这个函数会接受最新的state作为参数。3.使用useRef， count更新，在重新赋值给 countRef
+function Counter() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let t = setInterval(() => {
+      console.log(count); // 0
+    }, 1000);
+    () => {
+      clearInterval(t);
+    };
+  }, []);
+  return (
+    <div>
+      <p>You clicked {count} times</p>
+      <button onClick={() => setCount(count + 1)}>Click me</button>
+    </div>
+  );
+}
+```
+
+### 依赖项异常
+
+现象：状态变更，副作用不执行。
+解决：正确跟踪依赖项，保证“完整性”和“最小范围原则”
+
+### useRef 的滥用与误用
+
+现象：试图拿 ref 存储“需要响应式更新的状态”，导致 UI 不刷新。
+原因：`useRef.current`不是响应式的，它的作用是`跨渲染保存值`
+
+### Hooks 最佳实践
+
+1. 组件拆分：按逻辑维度，不是按 ui 维度
+
+示例：将“用户数据请求+加载+错误处理”封装`useUserData`,组件调用`const {data,loading,error} = useUserData`
+
+2. 依赖项管理：严格遵循“完整性”和“最小化”
+
+- 完整性`useEffect useCallback useMemo`(可借助 eslint 插件强制检查)
+
+3. 避免过度优化`useCallback useMemo`
+   在以下场景使用：
+
+- 函数传给`React.memo React.pureComponent`
+- 函数作为其他 Hooks 的依赖项（如 `useEffect` 依赖的回调函数）
+- useMemo 计算耗时超过`1ms`的复杂逻辑（如大数据排序）
+
+4. 自定义 Hooks：封装复用逻辑，命名规范统一
+
+- 命名 `useXXX`
+- 单一职责，如`useRequest`负责数据请求，`useLocalStoarge`负责本地存储
+
+5. 异步逻辑处理规范：
+
+```js
+useEffect(() => {
+  // useEffect的回调函数不能是async
+  async function getData() {
+    try {
+      let res = await fetch(`/data/${id}`);
+    } catch (e) {}
+  }
+  getData();
+}, [id]);
+
+useEffect(()=>{},[data.name])
+useEffect(()=>{},[普通值]) // 注意使用时 Object.is()
+useEffect(()=>{},[refValue.current]) // ❌ 1.useRef 的变更不会触发重新渲染
+```

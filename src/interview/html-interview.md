@@ -33,7 +33,57 @@
 
 1. 代码可读性、SEO 友好（搜索引擎更易理解内容结构），便于屏幕阅读器（无障碍访问），减少冗余 class 命名
 
-### 服务端渲染
+## SEO,需要知道的细节
+
+### 优化思路
+
+1. 页面结构优化
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="app,理财" />
+    <title>Document</title>
+  </head>
+  <body>
+    <header>Main page</header>
+    <nav>
+      <ul>
+        <li></li>
+        <li></li>
+        <li></li>
+        <li></li>
+        <li></li>
+      </ul>
+    </nav>
+    <main>
+      <article>
+        <h1>标题</h1>
+        <p>内容</p>
+      </article>
+    </main>
+    <footer>底部版权说明，信息说明</footer>
+  </body>
+</html>
+```
+
+2. 内容优化
+保证页面中关键词的覆盖率
+
+3. 技术向SEO优化
+- 地图
+- 结构化数据
+- 移动端兼容
+```css
+@media (max-width : 600px) {
+  body{
+
+  }
+}
+```
 
 ## history，vue 路由的 hash 模式和 history 有什么区别？动态路由？按需加载？鉴权？
 
@@ -61,7 +111,7 @@ hash 是页面的锚点
 运行在浏览器后台的独立线程，与网页无关。本质是个代理服务器。主要用于实现 PWA。离线缓存、消息推送、后台同步等功能。是 PWA 的核心技术之一。
 特点：1.生命周期独立。与网页无关，关了也能运行。2.离线缓存：拦截网络请求，优先读取缓存策略。3.通讯机制`postMessage`。4.安全机制：必须运行在 https 环境，遵循同源策略。
 
-### wesocket 是一种全双工通信协议，允许客户端与服务器之前简历持久连接，实现双方实时双工通信。打破 Http 的一问一答，适用需要实时数据交互的场景（IM，实时通知、在线协作工具）
+### wesocket 是一种全双工通信协议，允许客户端与服务器之前建立持久连接，实现双方实时双工通信。打破 Http 的一问一答，适用需要实时数据交互的场景（IM，实时通知、在线协作工具）
 
 特点：1.持久连接。无需重复建立连接。2.全双工通信，双方实时传输。3.低开销，握手协议基于 http 协议，后续通信不携带冗余头部消息。4.跨域支持.`acess-control-allow-origin`;5.二进制传输。不仅传输文本 UTF-8，还能传输二进制图片、视频。
 
@@ -94,6 +144,12 @@ hash 是页面的锚点
 | 应用场景     | 高频交互（在线游戏、聊天、协同） | 单项（股票、推送、通知、新闻）                    |
 
 ### 应用
+
+解决socket断联问题
+- 心跳检测。客户端或者服务端主动发送一个空包，对端同样返回相同空包，保障连接的稳定性和持久性。
+- - 流程：每30s发送心跳包`heartbeat`,后端立即响应，前端`15s`内未收到，则标记为异常。后端每30s检测客户端最后存活时间，若60s内未收到心跳，则主动断开连接。
+- 自动重连。客户端监测到断开，可采用指数退避的方式实现自动重连。
+
 
 重连设计：
 
@@ -408,11 +464,15 @@ if (
 
 - 消除 longtask
 - 场景 1 长时间 JS 执行
+
 1. 用 web workers 拆分计算密集型任务
 2. requestIdleCallback 处理非紧急任务
+
 ```js
 // 待处理的日志队列
-const logQueue = [/* 大量日志数据 */];
+const logQueue = [
+  /* 大量日志数据 */
+];
 
 // 空闲时处理日志（每次处理 10 条，避免单次耗时过长）
 function processLogs(deadline) {
@@ -432,7 +492,9 @@ function processLogs(deadline) {
 // 启动空闲任务处理
 requestIdleCallback(processLogs);
 ```
+
 3. 拆分长循环
+
 ```js
 // 原始长循环（可能耗时 >50ms，产生 Long Task）
 function badLoop() {
@@ -470,18 +532,18 @@ function optimizedLoop(total, batchSize = 100) {
 optimizedLoop(10000, 100);
 ```
 
-- 场景2:强制同步布局/重绘
-“强制同步布局” 指：先读取 DOM 布局属性（如 offsetWidth、getBoundingClientRect），再立即修改 DOM 样式，导致浏览器被迫重新计算布局（耗时），若频繁执行（如循环中），会产生 Long Task。
+- 场景 2:强制同步布局/重绘
+  “强制同步布局” 指：先读取 DOM 布局属性（如 offsetWidth、getBoundingClientRect），再立即修改 DOM 样式，导致浏览器被迫重新计算布局（耗时），若频繁执行（如循环中），会产生 Long Task。
 
 核心思路：先 “批量读取” 布局属性，再 “批量修改” 样式，避免读写交替。
 
 ## Html-dom 的渲染过程
 
-- 场景3:大量DOM操作
-核心思路：减少 DOM 操作次数，用 “离线 DOM” 或 “虚拟列表” 优化。
+- 场景 3:大量 DOM 操作
+  核心思路：减少 DOM 操作次数，用 “离线 DOM” 或 “虚拟列表” 优化。
 
-- 场景4:第三方急哦啊笨
-核心思路：让第三方脚本 “异步加载”，避免阻塞主线程。
+- 场景 4:第三方急哦啊笨
+  核心思路：让第三方脚本 “异步加载”，避免阻塞主线程。
 
 输入 ip，dns 解析，http 三次握手建立链接，收到资源，浏览器解析 html 文档，经历布局，绘制，光栅化（将 dom 元素转化为位图）
 

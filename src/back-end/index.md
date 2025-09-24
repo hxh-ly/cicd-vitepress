@@ -72,8 +72,8 @@
   |资源开销|无需多线程切换（上下文切换成本高）、无死锁风险，内存占用低| 单线程无法利用多核 CPU|用 cluster 模块创建集群（多进程），或 Worker Threads 分拆任务|
   |开发成本|无需处理线程同步（如锁、信号量），代码更简洁|CPU 密集型任务会阻塞事件循环（如大数据计算）|拆分 CPU 任务到 Worker Threads，或用微服务架构分摊计算压力|
 
-
 应用场景
+
 - 优先适合 I/O 密集型业务（如接口服务、数据采集）；
 - CPU 密集型业务（如数据加密、报表生成）需配合 Worker Threads 或 cluster 模块。
 
@@ -424,6 +424,116 @@ merge(@Query('name') name: string) {
 ```
 
 ## 如何实现 jwt 鉴权机制?说说你的思路
+
+- 密钥
+- 登录时生成 token（过期时间）
+- token 的三部分（ xxx 内容 xxx ）
+- 请求携带，进行解密验证。
+
+## 设计 node 通用处理错误的中间件函数
+
+- 错误分类 ✅
+- 错误捕获（同步、异步）
+- 错误响应
+- 错误日志
+- 错误传递：确保所有中间件和路由中的错误都能被正确处理(放在最后，才能捕获所有流程的错误)
+
+```js
+class AppError extends Error {
+  constructor(message, statusCode, errorCode = null, details = {}) {
+    super(message);
+    this.statusCode = statusCode; // HTTP状态码（4xx/5xx）
+    this.errorCode = errorCode; // 业务错误码（如 "USER_NOT_FOUND"）
+    this.details = details; // 错误详情（如参数校验结果）
+    this.isOperational = true; // 标记为可预期的业务错误（非系统错误）
+
+    // 捕获错误堆栈（排除当前构造函数调用）
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+module.exports = { AppError };
+```
+
+```js
+function errorHandler(error,req,res,next)=>{
+  // 错误分类（统计，还是中断）
+  let statusCode = error.statusCode || 500;
+  let errorCode = error.errorCode || "SERVER_ERROR";
+  let message = err.message || '服务器内部错误'
+  let detail = err.details || {};
+
+  // 生成唯一请求id
+
+  // 日志打点
+   console.error(`[${requestId}] 错误:`, {
+    message: err.message,
+    statusCode,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
+  // 根据环境返回响应
+  const response = {
+    success:false,
+    error:{
+      code:errorCode,
+      message:message,
+      ...(NODE_ENV === "development" && {
+        details,
+        stack: err.stack, // 堆栈信息仅在开发环境返回
+      }),
+    }
+  }
+
+  res.status(statusCode).json(response);
+}
+app.use(middleware)
+
+
+```
+
+```js
+const app = new express();
+process.on('unhandleRejection',(reason)=>{
+   console.error("未处理的Promise拒绝:", reason);
+  // 生产环境可在这里记录日志后重启服务
+  // throw reason; // 抛出后会被Express错误中间件捕获
+})
+process.on('unCaughtException',(error)=>{
+  console.error("未处理的同步错误:", err);
+  // 生产环境下，发生未捕获的同步错误建议重启服务
+  if (process.env.NODE_ENV === "production") {
+    process.exit(1);
+  }
+})
+app.use("user/:id", async (req, res, next) => {
+  const { id } = req.params;
+  try {
+     // 业务错误
+     if(id==='0') {
+      throw new AppError( "用户不存在",
+        404,
+        "USER_NOT_FOUND",
+        { userId: id })
+     }
+  // 同步错误
+  if (isNaN(Number(id))) {
+      throw new AppError("用户ID必须是数字", 400, "INVALID_PARAM");
+    }
+  // 异步错误
+  if(id==='999') {
+    await Promise.reject(new Error('数据连接超时')) // 未手动捕获的异步错误
+  }
+  } catch (e) {
+    next(e)
+  }
+});
+app.use();
+app.use(errorHandler);
+
+app.listen(3000, () => {});
+```
 
 ## 如果让你来设计一个分页功能,你会怎么设计?前后端如何交互?
 

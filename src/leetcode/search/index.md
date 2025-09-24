@@ -416,4 +416,237 @@ function lower_bound(nums, target) {
 }
 ```
 
+### 2563. 统计公平数对的数目
+
+题意：给一个数组`nums`，数组里选两个元素成一组，两元素和在给出的`lower`和`high`之间
+
+思想：二分边界
+
+```js
+var countFairPairs = function (nums, lower, upper) {
+  nums.sort((a, b) => a - b);
+  let ans = 0;
+  for (let j = 0; j < nums.length; j++) {
+    // 注意要在 [0, j-1] 中二分，因为题目要求两个下标 i < j
+    const r = lower_bound3(nums, j, upper - nums[j] + 1); // 这个值是不取的
+    const l = lower_bound3(nums, j, lower - nums[j]);
+    ans += r - l;
+  }
+  return ans;
+};
+```
+
+### 2070.每一个查询的最大美丽值
+
+题意：给定一个二维数组，其中元素`item[i]=[price,beauty]`。在给定另一个数组`queries`，`queries[i]`表示 prices 的大小。要求查询每一个`queries[i]`看能每一个的美丽值`beauty`是多少。
+
+```
+输入：items = [[1,2],[3,2],[2,4],[5,6],[3,5]], queries = [1,2,3,4,5,6]
+输出：[2,4,5,5,6,6]
+解释：
+- queries[0]=1 ，[1,2] 是唯一价格 <= 1 的物品。所以这个查询的答案为 2 。
+- queries[1]=2 ，符合条件的物品有 [1,2] 和 [2,4] 。
+  它们中的最大美丽值为 4 。
+- queries[2]=3 和 queries[3]=4 ，符合条件的物品都为 [1,2] ，[3,2] ，[2,4] 和 [3,5] 。
+  它们中的最大美丽值为 5 。
+- queries[4]=5 和 queries[5]=6 ，所有物品都符合条件。
+  所以，答案为所有物品中的最大美丽值，为 6 。
+```
+
+```js
+// 排序 + 先更新美丽值
+var maximumBeauty = function (items, queries) {
+  items.sort((a, b) => {
+    if (a[0] === b[0]) {
+      return a[1] - b[1];
+    }
+    return a[0] - b[0];
+  });
+  let max = 0;
+  for (let i = 0; i < items.length; i++) {
+    let ele = items[i];
+    if (ele[1] > max) {
+      max = ele[1];
+    } else {
+      ele[1] = max;
+    }
+  }
+
+  // console.log(items)
+  let ans = [];
+  for (let i = 0; i < queries.length; i++) {
+    let max = 0;
+    let ele = queries[i];
+    let idx = lower_bound3(items, ele + 1) - 1;
+    // 拿到下标还要在找一下，那个的美丽值最大
+    // console.log({ i }, { idx }, { ele })
+    ans[i] = items[idx] ? items[idx][1] : 0;
+  }
+  return ans;
+};
+
+function lower_bound3(nums, target) {
+  let left = -1;
+  right = nums.length; //[left,right)开区间
+  while (left + 1 < right) {
+    // 区间不为空
+    let mid = left + Math.floor((right - left) / 2);
+    if (nums[mid][0] < target) {
+      left = mid; // (mid,right)
+    } else {
+      right = mid; // (left,mid)
+    }
+  }
+
+  return right;
+}
+```
+
+### 658. 找到 K 个最接近的元素
+
+题意：给定一个排好序的数组`arr`,两个整数`k` 和`x`， 找到 k 个距离 x 最近的元素，如果左右两个元素距离 x 一样近，取左侧。最终要升序
+
+```
+输入：arr = [1,2,3,4,5], k = 4, x = 3
+输出：[1,2,3,4]
+```
+
+```js
+// 二分，定index位置，左右指针找到满足的就行
+var findClosestElements = function (arr, k, x) {
+  let idx = lower_bound3(arr, x);
+  if (idx === arr.length) {
+    return arr.slice(arr.length - k, arr.length);
+  }
+  if (arr[idx] !== x) {
+    idx = Math.abs(x - arr[idx - 1]) <= Math.abs(arr[idx] - x) ? idx - 1 : idx;
+  }
+  //console.log({ idx })
+  let left = idx,
+    right = idx + 1;
+  let r_arr = [];
+  let l_arr = [];
+  while (k > 0) {
+    if (left < 0 || Math.abs(arr[right] - x) < Math.abs(arr[left] - x)) {
+      r_arr.push(arr[right]);
+      right++;
+    } else {
+      l_arr.unshift(arr[left]);
+      left--;
+    }
+    k--;
+  }
+  // console.log(l_arr)
+  return [...l_arr, ...r_arr];
+};
+```
+
+### LCP 08.剧情触发时间
+
+题意：三个维度的值，用数组的三个元素表示`[C,R,H]` 0 天初始值`[0,0,0]` 随着游戏进程的进行，每一天玩家的三种属性值会增加。我们用一个二维数组 `increase` 来表示每天的增加情况。这个二维数组的每个元素是一个长度为 3 的一维数组，例如 [[1,2,1],[3,4,2]] 表示第一天三种属性分别增加 1,2,1 而第二天分别增加 3,4,2。 所有剧情触发条件也用另一个二维数组`requirements`。 对剧情触发的定义是：`requirements[0] requirements[1] requirements[2]`，对应的当天的属性值满足`C>=requirements[0]` `R>=requirements[1]` `H>requirements[2]` ，则为触发剧情。结果需要用数组存储。对应 requiement 对应哪样才满足触发剧情。如果都为满足则记录`-1`
+
+```js
+// 层级统计三个维度，C维度二分，满足了就继续R维度二分（起始点为C二分时确认的startIdx),对应H（起始点为R二分时确认的startIdx)同理。
+var getTriggerTime = function (increase, requirements) {
+  let atotal = 0,
+    btotal = 0,
+    ctotal = 0;
+  let arr = increase.map(([a, b, c]) => {
+    atotal += a;
+    btotal += b;
+    ctotal += c;
+    return [atotal, btotal, ctotal];
+  });
+  let ans = [];
+  for (let i = 0; i < requirements.length; i++) {
+    let ele = requirements[i];
+    if (ele[0] === ele[1] && ele[1] === ele[2] && ele[0] === 0) {
+      ans.push(0);
+      continue;
+    }
+    let aIdx = lower_bound3(arr, ele[0], 0, 0, arr.length - 1);
+    // console.log({ aIdx }, arr[aIdx]?.[0] < ele[0])
+    if (aIdx === arr.length || (aIdx === 0 && arr[aIdx][0] < ele[0])) {
+      ans.push(-1);
+      continue;
+    }
+    let bIdx = lower_bound3(arr, ele[1], 1, aIdx, arr.length - 1);
+    // console.log({ bIdx }, arr[bIdx]?.[1] < ele[1])
+    if (bIdx === arr.length || (aIdx === bIdx && arr[bIdx]?.[1] < ele[1])) {
+      ans.push(-1);
+      continue;
+    }
+
+    let cIdx = lower_bound3(arr, ele[2], 2, bIdx, arr.length - 1);
+    // console.log({ cIdx }, arr[cIdx]?.[2] < ele[2])
+    if (cIdx === arr.length || (cIdx === bIdx && arr[cIdx]?.[2] < ele[2])) {
+      ans.push(-1);
+      continue;
+    }
+    ans.push(cIdx + 1);
+  }
+  return ans;
+};
+```
+
 # 二分答案
+
+循环不变量：对于求最小，开区间的写法，为什么最终返回`right`。在初始化（循环之前）、循环中、循环结束后，都时时刻刻保证`check(right)===true`和`check(left)===false`，这就是循环不变量。根据循环不变量，循环结束时`left+1===right`，那么`right`就是最小的满足要求的数（因为再-1 就不满足要求了）。所以答案是`right`
+
+## 求最小
+
+```js
+// 模版
+function low_bound(nums) {
+  let left = -1,
+    right = nums.length; // 循环不变量（ check(right)===true)
+  while (left + 1 < right) {
+    let mid = Math.floor((left + right) / 2);
+    if (check(mid)) {
+      right = mid;
+    } else {
+      left = mid;
+    }
+  }
+  return right; // 答案是right或者left+1
+}
+```
+
+### 1283. 使结果不超过阈值的最小除数
+
+题意：给定一个数组，和一个阈值，找一个正整数`M`作为除数，让数组除以这个正整数，向上取整，并加和，使得最终结果小于等于这个阈值。 找这个正整数最小是多少。
+
+具有单调性，`M`越大，加和结果记忆越小，具有单调性。可考虑使用二分答案。
+```js
+//  找到了继续right往左到。
+// 给定阈值范围  
+var smallestDivisor = function (nums, threshold) {
+  function check(data) {
+    // 二分答案，
+    let sum = 0;
+    for (let v of nums) {
+      sum += Math.ceil(v / data);
+      if (sum > threshold) {
+        return false;
+      }
+    }
+    return true;
+  }
+  let target = Math.max.apply(null, nums);
+  function low_bound(nums, threshold) {
+    // 最小 right为true
+    let left = -1,
+      right = threshold + 1;
+    while (left + 1 < right) {
+      let mid = Math.floor((right + left) / 2);
+      if (check(mid)) {
+        right = mid;
+      } else left = mid;
+    }
+    return right;
+  }
+  let i = low_bound(nums, target);
+  //console.log({ i })
+  return i;
+};
+```
