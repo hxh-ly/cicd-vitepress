@@ -25,7 +25,7 @@ jobs:
     - name: Build VitePress
       run: npm run docs:build
 
-    - uses: manyuanrong/setup-ossutil@v1.0
+    - uses: manyuanrong/setup-ossutil@v2.0
       with:
         endpoint: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
         access-key-id: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
