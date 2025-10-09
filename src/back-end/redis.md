@@ -11,6 +11,14 @@
 常用命令
 
 ```shell
+# redis-cli
+redis-cli -h 47.115.61.169 -p 6380 -a xxxx
+set verification:13112345678:code 060606 EX 300000
+EXISTS key
+TYPE key # 查看类型
+```
+
+```shell
 # string
 set key1 111
 

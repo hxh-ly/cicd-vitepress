@@ -62,3 +62,22 @@ st=>start: 开始框
 - - 选择context
 - - 压缩context
 - - 隔离context
+
+
+
+## Claude Code
+安装
+```shell
+npm install -g @anthropic-ai/claude-code
+
+claude -v
+# router 智能路由，可以接入其他大模型
+npm install -g @musistudio/claude-code-router
+```
+vim 配置 `~/.claude-code-router/config.json`
+
+命令
+```shell
+ccr stop
+ccr code
+```

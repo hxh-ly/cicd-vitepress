@@ -34,6 +34,10 @@ const webpackCofig = [
     text: "Vite",
     link: "front-eng/vite-index",
   },
+  {
+    text:'组件设计',
+    link:'front-eng/component-repo'
+  }
 ];
 const reactConfig = [
   { text: "开始", link: "react/index" },
