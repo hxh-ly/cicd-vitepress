@@ -37,6 +37,10 @@ const webpackCofig = [
   {
     text:'组件设计',
     link:'front-eng/component-repo'
+  },
+  {
+    text:'测试',
+    link:'front-eng/test/test'
   }
 ];
 const reactConfig = [
