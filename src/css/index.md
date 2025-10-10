@@ -142,7 +142,7 @@ Table-cell（传统方法）
 }
 ```
 
-## float
+## float 
 float 是 CSS 早期的布局属性，设计初衷是实现 “文字环绕元素” （如新闻中图片左 / 右浮动，文字围绕图片排列）
 ### 基本取值
 取值：`left`、`right`、`none`、`inherit`
@@ -165,5 +165,44 @@ overflow:hidden;
   clear: both; /* 不允许两边有浮动元素 */
   visibility: hidden;
   height: 0;
+}
+```
+
+### grid布局
+### 网格编排
+```css
+.parent{
+  display:grid; /* 所有元素会变成块级*/
+  grid-template-rows:1fr 1fr 1fr; /* 这里表示三行，每行占1/3。fr时fragment缩写 */
+  grid-template-columns:repeat(3,1fr);/* repeat是 重复 */
+  grid-auto-rows:minmax(80px,auto); /* 隐式网格布局,也就是规定 子项多于规定的数量时 的编排尺寸， 函数minmax表示[80px,auto-占满] */
+
+}
+/* 父容器 */
+auto-fill: 尽可能填充更多的容器
+auto-fit: 在一行的时候，和fill有区别，区别在于刚好填充满，而auto-fill是尽可能填充满。
+```
+### 子项放置 
+```css
+.parent {
+  grid-template-areas: 
+  'header header'
+  'aside tab'
+  'aside main'; 
+  align-items:center;
+  place-items:center center; /* 速写justify-items 和 align-items */
+
+  justify-content: center; /* 定义轨道在容器中主轴的排列，必须容器有多余空间才生效 */
+  justify-items: center; /* 定义子项在轨道中主轴的排列 */
+}
+.son {
+  grid-column: grid-column-start grid-column-end; /* 用于控制自相跨越的列的网格线 */
+  grid-auto-flow:row; /* 默认从左到右 从上到下*/
+  grid-auto-flow:column dense; /* 默认从上到下，从左到右 */  /* dense表示紧凑排列 */
+  align-self:end;
+  place-self:center center; /* 速写justify-items 和 align-items */
+}
+.item:last-child{
+  order:-1; /* 升序，最小的排在最前面 */
 }
 ```

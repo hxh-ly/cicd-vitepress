@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        .container{
+            height: 90vh;
+            display: grid;
+            grid-template-rows: repeat(2,50px) 1fr;
+            grid-template-columns:150px 1fr;
+            gap: 10px;
+            grid-template-areas: 
+            'header header'
+            'aside tab'
+            'aside main';
+        }
+        .item {
+            font-size: 40px;
+            background: orange;
+        }
+        .header{
+            background-color: burlywood;
+           grid-area: header;
+        }
+        .main{
+            grid-area: main;
+        }
+        .aside{
+            grid-area:aside;
+        }
+        .tab {
+            grid-area: tab;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="item main">main</div>
+        <div class="item header">header</div>
+        <div class="item aside">aside</div>
+        <div class="item tab">tab</div>
+    </div>
+</body>
+</html>
