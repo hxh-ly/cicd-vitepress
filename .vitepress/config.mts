@@ -129,6 +129,10 @@ export default withMermaid(
               text: "JS基础",
               link: "/base-js",
             },
+            {
+              text:'Next',
+              link:'/nextjs'
+            }
           ],
         },
         {
