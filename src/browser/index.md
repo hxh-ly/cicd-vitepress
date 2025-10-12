@@ -70,6 +70,36 @@ app.get("/api/user", (req, res) => {
 -
 - websocket 原理：协议本身不限制跨域
 
+## HSTS （HTTP Strict Transport Security）
+HSTS（HTTP Strict Transport Security）是一种​​强制浏览器使用 HTTPS 连接的安全策略机制​​，旨在防止中间人攻击和协议降级攻击。
+
+核心作用：
+1. 强制 HTTPS 连接​
+```
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+```
+- 浏览器收到此响应头后，在指定时间内（max-age）会自动将所有 HTTP 请求转为 HTTPS
+- 即使用户手动输入 http://example.com，浏览器也会自动跳转到 https://example.com
+2. ​​防止 SSL 剥离攻击​
+- 攻击者拦截 HTTP 流量，阻止用户升级到 HTTPS
+- HSTS 通过浏览器内置机制完全绕过 HTTP 连接
+3. ​​消除首次访问风险​
+- 通过 preload列表解决首次访问无 HSTS 策略的问题
+
+原理
+```mermaid
+sequenceDiagram
+    participant User
+    participant Browser
+    participant Server
+    
+    User->>Browser: 访问 http://example.com
+    Browser->>Server: HTTP 请求
+    Server-->>Browser: 301 重定向到 HTTPS + HSTS 头
+    Browser->>Server: 后续所有请求自动使用 HTTPS
+    Note over Browser: 在 max-age 期间强制执行 HTTPS
+```
+
 ## http 和 https 的差别
 
 | 区别     | http               | https                                            |
