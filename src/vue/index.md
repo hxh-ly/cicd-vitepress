@@ -211,6 +211,20 @@ export default {
 
 ## vue3 升级了哪些功能
 
+|特性类别|Vue2|Vue3|
+|---|---|---|
+|响应式系统|使用Object.defineProperty|使用proxy|
+|API风格|Options API|Composition API|
+|生命周期钩子|beforeCreate、created、beforeMounted、mounted,beforeUpdate,updated,beforeDestory,destoryed|组合式 API 下：onBeforeMount, onMounted, onBeforeUpdate, onUpdated, onBeforeUnmount, onUnmounted|
+|模板根节点​|必须单个根节点|支持​​多根节点（Fragments）​​|
+|性能优化|虚拟DOM全量Diff|静态提升​​、​​Patch Flag​​ 等编译时优化|
+|打包体积|整体打包。体积相对较大|支持 ​​Tree-shaking​​（摇树优化）|
+|TypeScript 支持|支持，但通过外部库实现，类型推断较弱|使用 TypeScript 重写​​，提供更好的类型推断和支持|
+|新内置组件/特性|无|Teleport​​（传送门）、​​Suspense​​（异步组件）|
+|全局 API​|Vue.extend、Vue.nextTick等全局 API|改为​​实例方法​​或​​按需导入​​（如 import { createApp } from 'vue'）|
+|v-model|单个组件支持一个v-model|单个组件可支持多个v-model(v-model:title)|
+
+
 1. createApp
 
 ```js
@@ -663,3 +677,21 @@ count.value++; // 修改 value 会触发更新（被 Proxy 拦截）
 |停止监听|返回一个停止函数、调用后停止监听(`const stop = watch()` )| 同意返回停止函数，用法一致 |
 |清理副作用|返回清理函数，下一次执行前或停止监听会调用| 同上，回调返回清理函数，时机相同 |
 |场景| 明确监听目标，需要新旧值，不需要初始化执行 | 依赖多个值联动，需首次执行，无需新旧值，需深度监听 |
+
+## vue2数组会什么会失去响应式
+|场景分类|具体操作示例|原因简述|推荐解决方案|
+|直接通过索引修改|this.items[0] = newValue|Object.defineProperty无法拦截数组索引的赋值操作|使用 Vue.set(this.items, 0, newValue)或 this.items.splice(0, 1, newValue)|
+|直接修改数组长度​|this.items.length = 0|修改 length属性不会被 Object.defineProperty检测到|	使用 this.items.splice(0)来清空数组|
+|使用非变异方法|​this.items = this.items.concat([newItem])|方法返回新数组，需用新引用替换旧引用才能触发更新|使用变异方法（如 push）或直接赋值新数组|
+`Object.defineProperty`存在一个​​先天限制​​：它主要设计用于对象属性，对于数组的一些操作无法有效拦截。这就是表格中前两类问题的根源。
+
+## vue2数组的变异方法
+```js
+arr.pop()
+arr.push()
+arr.shift()
+arr.unshift()
+arr.splice()
+arr.sort()
+arr.reverse()
+```
