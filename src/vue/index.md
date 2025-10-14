@@ -665,6 +665,47 @@ const count = ref(0);
 count.value++; // 修改 value 会触发更新（被 Proxy 拦截）
 ```
 
+## vue3组件能绑定多个v-model
+归结为 ​​v-model的参数化​​。它将原本硬编码的 modelValue/update:modelValue这对绑定关系，推广为可任意指定的 arg/update:arg关系。Vue 3 能够实现多个 v-model绑定的核心机制可以概括为以下几点：
+1. 参数模型化
+```jsx
+// 这个参数名决定了 子组件props名称和需要触发的事件名称
+<UserForm 
+  v-model:username="userName" 
+  v-model:age="userAge" 
+  v-model:email="userEmail"
+/>
+```
+2. 语法糖展开
+```jsx
+<UserForm 
+  :username="userName" 
+  @update:username="userName = $event"
+  :age="userAge" 
+  @update:age="userAge = $event"
+  :email="userEmail" 
+  @update:email="userEmail = $event"
+/>
+```
+3. 子组件的约定
+- 接受props：通过defineProps接受与参数名同名的prop
+- 触发事件：在数据需要更新时，通过 defineEmits定义并触发名为 update:参数名的事件（例如 update:username, update:age）
+```js
+const props = defineProps(['username', 'age', 'email']);
+const emit = defineEmits(['update:username', 'update:age', 'update:email']);
+
+// 针对 username 的局部响应式变量
+const localUsername = computed({
+  get() {
+    return props.username;
+  },
+  set(value) {
+    emit('update:username', value);
+  }
+});
+```
+这样，在子组件的输入框中使用 v-model="localUsername"，就能完美地桥接到父组件的双向数据流。
+
 ## watch 和 watchEffect 的区别
 
 都是用来做监听响应式数据变化并执行副作用的 api，但它们的**使用方式**和**适用场景**有区别。
