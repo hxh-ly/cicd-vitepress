@@ -83,6 +83,7 @@ const backEndConfig = [
 const mobileConfig = [
   { text: "web-适配", link: "mobile/rem.md" },
   { text: "小程序", link: "mobile/mini-app.md" },
+  {text:"electron",link:"electron/index.md"}
 ];
 const htmlConfig = [{ text: "html", link: "interview/html-interview" }];
 const microFrontend = [
@@ -147,6 +148,10 @@ export default withMermaid(
           text: "后端",
           items: backEndConfig,
         },
+        {
+          text:'跨端',
+          items:[...mobileConfig]
+        }
       ],
       sidebar: [
         {

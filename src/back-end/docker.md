@@ -164,7 +164,7 @@ docker下载操作（这里不列出）
 ```shell
 sudo systemctl daemon-reload #更新
 sudo systemctl start docker #启动
-docker login #尝试登录
+docker login #尝试登录、
 ```
 docker成功连接上docker hub
 ![alt text](./dockerImg/image-2.png)

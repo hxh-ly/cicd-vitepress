@@ -373,7 +373,17 @@ function logger(req, res, next) {
 app.use(logger);
 ```
 
-### 如何封装
+### 如何封装错误中间件，应该放在最外层还是最里层
+```js
+app.use(async(req,res,next)=>{
+  try{
+  await next()
+  } catch(e) {
+    console.log(e) 
+  }
+})
+// 放在最外层，当某一层报错后，会往外抛错，如果现在最里层，错误抛出去根本不经过它，捕获不到
+```
 
 ## 说说对 Nodejs 中的事件循环机制
 

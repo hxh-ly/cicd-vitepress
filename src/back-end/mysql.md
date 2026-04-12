@@ -7,4 +7,8 @@ mysql -u root -p
 ALTER USER 'root'@'localhost' IDENTIFIED BY 'new_strong_password';
 # 刷一下
 FLUSH PRIVILEGES;
+
+# use datebase;
+# show tables;
+# desc xxx; 查看表结构
 ```
