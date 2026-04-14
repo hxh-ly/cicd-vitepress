@@ -411,6 +411,107 @@ wss.on("connection", () => {
 5.  浏览器的重排/重绘
 6.  requestIdleCallback
 
+### 什么属性会触发重排，什么属性会触发重绘
+#### 重排
+改变几何属性
+- top 
+- height
+- borderWidth
+- padding
+- margin
+#### 重绘
+改变外观属性
+- color
+- bg
+#### 合成层
+- transfrom
+- opacity
+
+### 什么是强制同步布局（forced Synchronous Layout）
+正常流程：JS执行完 -> 浏览器统一做Layout
+
+强制同步布局：你在JS里先修改了样式，然后立即读取几何属性（如offsetTop、clientHeight、getComputedStyle）浏览器被迫立即执行Layout，然后再继续执行JS。
+```js
+const doms = document.querySelectorAll('.item')
+// 每一轮循环都触发Layout 如果有1000个元素，就有1000次Layout。浏览器被逼疯了
+for(let i =0;i<dom.length;i++) {
+  // 触发layout
+  const height = dom[i].offsetHeight;
+  // 标记layout
+  dom[i].style.height = height + 10 + 'px'
+}
+```
+### Layout Thrashing（布局抖动）
+当强制布局频繁发生时，页面会“抖动”，每一帧都在重新计算布局。性能急剧下降。
+
+解决方案：读写分离。
+```js
+const doms = document.querySelectorAll('.item')
+const heights = [];
+// 每一轮循环都触发Layout 如果有1000个元素，就有1000次Layout。浏览器被逼疯了
+for(let i =0;i<dom.length;i++) {
+  // 读 触发一次layout
+  const height = dom[i].offsetHeight;
+  heights[i] = height;
+}
+for(let i =0;i<dom.length;i++) {
+  // 写
+  dom[i].style.height = heights[i];
+}
+```
+
+### 滚动卡顿解决方案
+- performance录制，找到掉帧，看main线程 找出（layout/paint/js）
+- layout频繁？，强制重新布局 -》 读写分离
+- 检查是否频繁修改几何属性 -》改用transfrom
+- 频繁修改颜色/背景 -》 合并处理或用css变量（跳过布局阶段）
+- addEventListener('',fn, {passive:true} ) 不会阻止默认事件
+- rAF
+- 提升至合成层（慎用）如果js执行过长
+- 拆分长任务 setTimeout webworker
+- dom多，虚拟dom
+```js
+let ticking = false;
+window.addEventListener('scroll',(e)=>{
+ if(!ticking) {
+  requestAnimationFrame(()=>{
+    const scrollTop = window.pageYOffset;
+    header.style.opacity = scrollTop / 500;
+    ticking = false;
+  })
+  ticking = true;
+ }
+})
+```
+- 某些元素能不能再别的合成层，不参与layout
+
+### 合成层
+浏览器将页面分为多个合成层，每个合成层独立控制 。最终合成器将多个合成层合成为最终画面。如果一个图层的内容变了，只需要重新绘制这层，其他不同。
+
+如何创建？ 
+- transfrom
+- opacity
+- willChange：transfrom
+- position：fixed
+
+好处：动画只需要合成层处理，不触发layout和paint，性能极高。
+
+滥用危害：每个合成层占用内存，滥用造成内存飙升，只在需要动画的元素上使用，动画结束后移除。
+
+### performance面板实战怎么定位问题
+- 看FPS图表：红色长条代表掉帧
+- 看火焰图（Main）线程：
+- - 红色长条 - layout（重排）
+- - 紫色长条 - 重绘
+- - 绿色长条 - js执行
+- - 黄色长条 - style计算
+- 看layout shift：不稳定的元素移动
+
+常见问题：
+- 长黄色块（长任务）
+- 紫色标记（强制同步布局）
+
+
 ### LongTask
 
 主线程执行时间超过 50ßms 的任务即为 Long Task
