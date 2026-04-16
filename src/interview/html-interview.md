@@ -142,6 +142,222 @@ hash 是页面的锚点
 | 自动重连     | 应用层实现                       | 浏览器原生自动重连                                |
 | 数据传输效率 | 连接后无 http 头，效率高         | 基于 http 持久连接，每个消息有少量头部传递        |
 | 应用场景     | 高频交互（在线游戏、聊天、协同） | 单项（股票、推送、通知、新闻）                    |
+### 为什么ai应用常用sse而不是socket
+- 架构匹配：AI交互本质上请求-响应，不是真的双向对话
+- 开发简单：SSE API简单，自动处理重连
+- 生态兼容：基于HTTP，无缝集成现有基础设施
+- 成本效益：对于ai流式输出场景，SSE已完全足够。
+### sse断线自动重连，如何捞回丢失数据
+|方案 |描述 | 适合场景 |
+|---|---|---|
+| 消息id + Last-Event-ID | 服务端每条消息都带ID，客户端重连携带最后收到的ID | 简单消息流 |
+| 检查点机制 | 客户端定期确认收到位置 | 大文件下载 |
+| 服务端缓冲 | 服务器保存最近N条消息 | 聊天应用 |
+| 混合方案 | 以上组合 | ai流式输出 |
+
+```ts
+// last-event-id + 服务端缓存消息
+let messageCounter = 0;
+const messageBuffer = new Map(); // 缓存最近的消息
+
+app.get('/api/ai-stream', (req, res) => {
+  // 获取客户端最后收到的消息ID
+  const lastEventId = req.headers['last-event-id'] || '0';
+  console.log('客户端最后收到的ID:', lastEventId);
+  
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+  
+  // 发送一个心跳，保持连接
+  const heartbeatInterval = setInterval(() => {
+    res.write(': heartbeat\n\n');
+  }, 30000);
+  
+  // 模拟AI流式输出
+  async function streamAIResponse(prompt, startFromId = 0) {
+    const aiResponse = "这是AI生成的流式回复内容，会分成多个chunk发送。";
+    const chunkSize = 3;
+    
+    for (let i = 0; i < aiResponse.length; i += chunkSize) {
+      const chunk = aiResponse.substring(i, Math.min(i + chunkSize, aiResponse.length));
+      messageCounter++;
+      
+      // 缓存消息
+      messageBuffer.set(messageCounter.toString(), {
+        id: messageCounter,
+        data: chunk,
+        timestamp: Date.now()
+      });
+      
+      // 清理旧缓存（最多保存1000条）
+      if (messageBuffer.size > 1000) {
+        const oldestKey = Array.from(messageBuffer.keys())[0];
+        messageBuffer.delete(oldestKey);
+      }
+      
+      // 发送消息，包含id
+      res.write(`id: ${messageCounter}\n`);
+      res.write(`data: ${JSON.stringify({ chunk, index: i })}\n\n`);
+      
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    // 发送结束标记
+    messageCounter++;
+    res.write(`id: ${messageCounter}\n`);
+    res.write(`event: end\n`);
+    res.write(`data: ${JSON.stringify({ status: 'complete' })}\n\n`);
+  }
+  
+  // 判断是否需要重发丢失的消息
+  const lastIdNum = parseInt(lastEventId);
+  if (lastIdNum > 0) {
+    // 重发丢失的消息
+    const lostMessages = [];
+    for (let id = lastIdNum + 1; id <= messageCounter; id++) {
+      const cached = messageBuffer.get(id.toString());
+      if (cached) {
+        lostMessages.push(cached);
+      }
+    }
+    
+    // 先重发丢失的消息
+    lostMessages.forEach(msg => {
+      res.write(`id: ${msg.id}\n`);
+      res.write(`data: ${JSON.stringify({ 
+        chunk: msg.data, 
+        isRecovery: true,  // 标记为重发数据
+        originalTimestamp: msg.timestamp 
+      })}\n\n`);
+    });
+  }
+  
+  // 开始新的流式输出
+  streamAIResponse("用户的问题");
+  
+  // 清理
+  req.on('close', () => {
+    clearInterval(heartbeatInterval);
+  });
+});
+```
+
+```ts
+// 检查点机制
+// 客户端实现检查点
+class SSEClientWithCheckpoint {
+  constructor(url, options = {}) {
+    this.url = url;
+    this.checkpointInterval = options.checkpointInterval || 5000; // 5秒确认一次
+    this.lastCheckpointId = localStorage.getItem('lastCheckpointId') || '0';
+    this.pendingMessages = new Map(); // 未确认的消息
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 10;
+    
+    this.connect();
+  }
+  
+  connect() {
+    // 在URL中传递最后确认的消息ID
+    const urlWithCheckpoint = `${this.url}?lastCheckpoint=${this.lastCheckpointId}`;
+    this.eventSource = new EventSource(urlWithCheckpoint);
+    
+    this.eventSource.onmessage = this.handleMessage.bind(this);
+    this.eventSource.onerror = this.handleError.bind(this);
+    
+    // 定期发送确认
+    this.checkpointTimer = setInterval(() => {
+      this.sendCheckpoint();
+    }, this.checkpointInterval);
+  }
+  
+  handleMessage(event) {
+    const data = JSON.parse(event.data);
+    const messageId = event.lastEventId || data.id;
+    
+    if (!messageId) return;
+    
+    // 存储未确认的消息
+    this.pendingMessages.set(messageId, {
+      data: data,
+      timestamp: Date.now()
+    });
+    
+    // 处理消息
+    this.onMessage(data, messageId);
+    
+    // 立即确认（或批量确认）
+    if (data.isCritical) {
+      this.sendCheckpoint(messageId);
+    }
+  }
+  
+  sendCheckpoint(lastConfirmedId = null) {
+    if (!lastConfirmedId) {
+      // 找出已处理的最大ID
+      const ids = Array.from(this.pendingMessages.keys())
+        .map(id => parseInt(id))
+        .filter(id => !isNaN(id));
+      
+      if (ids.length === 0) return;
+      
+      lastConfirmedId = Math.max(...ids).toString();
+    }
+    
+    // 发送确认到服务器
+    fetch(`${this.url}/checkpoint`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientId: this.clientId,
+        lastCheckpointId: lastConfirmedId
+      }),
+      keepalive: true // 即使页面关闭也发送
+    }).then(() => {
+      this.lastCheckpointId = lastConfirmedId;
+      localStorage.setItem('lastCheckpointId', lastConfirmedId);
+      
+      // 清理已确认的消息
+      this.pendingMessages.forEach((msg, id) => {
+        if (parseInt(id) <= parseInt(lastConfirmedId)) {
+          this.pendingMessages.delete(id);
+        }
+      });
+    });
+  }
+  
+  handleError() {
+    this.reconnectAttempts++;
+    
+    if (this.reconnectAttempts > this.maxReconnectAttempts) {
+      console.error('达到最大重连次数');
+      clearInterval(this.checkpointTimer);
+      this.eventSource.close();
+      return;
+    }
+    
+    // 指数退避重连
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    
+    setTimeout(() => {
+      this.eventSource.close();
+      this.connect();
+    }, delay);
+  }
+  
+  onMessage(data, messageId) {
+    // 由用户实现
+    console.log('收到消息:', data, 'ID:', messageId);
+  }
+}
+```
+
+```ts
+// 会话状态恢复（AI应用专用）
+```
 
 ### 应用
 
@@ -809,4 +1025,118 @@ requestAnimationFrame(() => {
     color: blue;
   }
 </style>
+```
+
+## 对比 xhr 和fetch
+|特性| XMLHttpRequest | Fetch API | 胜出方 |
+|---|---|---|---|
+| 语法简简洁 | 冗长| 简洁| Fetch |
+|Promise支持| 需封装| 原生| Fetch|
+|错误处理|全面|需手动处理| XHR|
+| 超时控制 |原始支持|需自己实现| XHR|
+|请求取消|xhr.abort()| abortControl.abort |平手|
+|进度监控|完整事件|有限支持| XHR |
+| 流式处理 |不支持|支持| Fetch|
+| cors|完整|完整|平手|
+| 浏览器支持|全平台|ie不支持|XHR|
+|缓存控制|完整|完整|平手|
+|请求拦截|可重写|可包装|平手|
+### fetch
+- Fetch与Streams API结合更强大
+- fetch是service worker的核心api
+- fetch更好支持http2特性
+- 现在框架 React query、SWR等库内部使用Fetch
+
+```js
+// fetch 封装通用库
+// 1.请求配置，2.超时取消控制，3.返回类型控制
+class HttpClient {
+  constructor(baseURL = '', options = {}) {
+    this.baseURL = baseURL;
+    this.defaultOptions = {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+      },
+      credentials: 'same-origin',
+      ...options
+    };
+  }
+  
+  async request(endpoint, options = {}) {
+    const url = `${this.baseURL}${endpoint}`;
+    const config = {
+      ...this.defaultOptions,
+      ...options,
+      headers: {
+        ...this.defaultOptions.headers,
+        ...options.headers
+      }
+    };
+    
+    // 超时控制
+    const { timeout = 10000 } = config;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+      const response = await fetch(url, {
+        ...config,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // 处理响应
+      if (!response.ok) {
+        throw new HttpError(response.status, response.statusText);
+      }
+      
+      // 根据Content-Type解析响应
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json();
+      }
+      return await response.text();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error('请求超时');
+      }
+      throw error;
+    }
+  }
+  
+  get(endpoint, options = {}) {
+    return this.request(endpoint, { ...options, method: 'GET' });
+  }
+  
+  post(endpoint, data, options = {}) {
+    return this.request(endpoint, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data),
+      credentials: 'same-origin' // 发送cookie: 'same-origin' | 'include' | 'omit'
+    });
+  }
+  
+  // 其他方法...
+}
+
+class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+```
+```js
+// fetch如何取消请求
+const ab = new AbortController()
+fetch('/app/getdata',{signal:ab.signal}).then(res=>res.json()).catch(err=>{
+  if(error.name === "AbortError") {
+    console.log('请求被被取消')
+  }
+})
+ab.abort()
 ```
