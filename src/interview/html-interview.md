@@ -1140,3 +1140,223 @@ fetch('/app/getdata',{signal:ab.signal}).then(res=>res.json()).catch(err=>{
 })
 ab.abort()
 ```
+
+### ArrayBuffer
+#### 1.什么是buffer？
+buffer是node特有的，用于处理二进制数据的类，在浏览器环境中，用ArrayBuffer替代
+```js
+// node
+const buf = Buffer.from("hello",'utf8')
+console.log(buf) // <Buffer 48 65 6c 6c 6f>
+console.log(buf.toString('hex')) // 48656c6c6f
+console.log(buf.toString('base64')) // SGVsbG8=
+
+// Buffer实际是Unit8Array的子类
+```
+#### 2.buffer和ArrayBuffer的关系
+```js
+// Buffer -> ArrayBuffer
+const buffer = Buffer.from('hello')
+const arraybuffer = buffer.buffer; //底层的ArrayBuffer
+
+// ArrayBuffer -> Buffer
+const arrayBuffer = new ArrayBuffer(10)
+const bufferFromArr = Buffer.from(arrayBuffer)
+```
+#### 3.blob是什么
+Blob（Binary Large Object）不可变的原始数据，常用文件操作
+
+```js
+//. new Blob([JSON.stringify({a:2}) ],{type:"application/json"});
+//. new Blob([],{ });
+const blob = new Blob(["Hello word"],{type:"text/plain"})
+async function readBlob(blob) {
+  const test = await blob.text()
+  const arrayBuffer = await blob.arrayBuffer()
+  const dataUrl = await new Promise((resolve)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>resolve(reader.result);
+    reader.readAsDataUrl(blob);
+  })
+}
+```
+#### 4.Unit8Array时什么
+TypedArray是专门用于处理二进制数据的类型化数组，Unit8Array是其中的一种
+```js
+// 各种TypedArray
+const typedArrays = {
+  Int8Array: '8位有符号整数',
+  Uint8Array: '8位无符号整数（0-255）', // 最常用
+  Uint8ClampedArray: '8位无符号整数（限制在0-255）',
+  Int16Array: '16位有符号整数',
+  Uint16Array: '16位无符号整数',
+  Int32Array: '32位有符号整数',
+  Uint32Array: '32位无符号整数',
+  Float32Array: '32位浮点数',
+  Float64Array: '64位浮点数'
+};
+```
+```js
+// 常见操作
+const unit8 = new Unit8Array(5)
+uint8[0] = 72;  // H
+uint8[1] = 101; // e
+uint8[2] = 108; // l
+uint8[3] = 108; // l
+uint8[4] = 111; // o
+
+// 从字符串创建
+const encoder = new TextEncoder();
+const uint8FromText = encoder.encode('Hello');
+
+// 转换为字符串
+const decoder = new TextDecoder();
+const text = decoder.decode(uint8FromText); // "Hello"
+
+// 与普通数组的转换
+const normalArray = Array.from(uint8); // [72, 101, 108, 108, 111]
+const fromArray = Uint8Array.from([72, 101, 108, 108, 111]);
+```
+#### 5.base64是什么
+Base64是一种用于64个字符表示二进制数据的编码方式
+```js
+// Base64 字符集
+const base64Chars = 
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ' +
+  'abcdefghijklmnopqrstuvwxyz' +
+  '0123456789+/';
+// Base64 编码原理：3字节 → 4个Base64字符  
+```
+```js
+// 转换方式
+const text = 'hello'
+const base64 = btoa(text) // "SGVsbG8sIFdvcmxkIQ=="
+let otext = atob(base64) // "Hello, World!"
+
+// 注意：btoa/atob 只能处理Latin1字符
+// 处理UTF-8需要转义
+function encodeUTF8Base64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+function decodeUTF8Base64(base64) {
+  return decodeURIComponent(escape(atob(base64)));
+}
+```
+```js
+//转换
+
+// arrayBuffer -> unit8Array
+// unit8Array -> arrayBuffer
+
+// unit8Array -> base64
+function unit8ArrayToBase64(unit8Arrayl) {
+  let buf = '';
+  for(let i =0;i<unit8Arrayl.length;i++) {
+    buf += String.fromCharCode(unit8Arrayl[i]) 
+  }
+  return btoa(buf)
+}
+
+// base64 -> unit8Array
+function base64ToUnit8Array(base64) {
+   let str = atob(base64);
+   let buf = new Unit8Array(str.length);
+   for(let i=0;i<str.length;i++) {
+    buf[i] = str.charCodeAt(i);
+   }
+   return buf;
+}
+
+function BlobToBase64(blob) {
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onloaded = ()=>{
+      resolve(r.result)
+    }
+    r.readAsDataUrl(blob);
+  })
+}
+
+function base64ToBlob(base64,contentType,splitSize = 512){
+   let buf = atob(base64)
+   let len = [];
+   for(let i =0; i<buf.length;i+=splitSize) {
+    let temp = buf.slice(i,i+splitSize);
+    for(let j=i+0;j<i+temp.length;j++) {
+      len[j]= temp.charCodeAt(j-i)
+    }
+   }
+   return new Blob([new Unit8Array(len)],{type:contentType})
+}
+```
+
+
+```
+原始数据
+    ↓
+ArrayBuffer (原始二进制)
+    ├── Uint8Array (视图)
+    ├── Blob (文件对象)
+    └── 其他TypedArray
+        ↓
+Base64 (文本表示)
+```
+
+### ASCII与二进制的关系详解
+1.ASCII是什么？
+
+ASCII（American Standard Code for Information Interchange，美国信息交换标准代码）是一种字符编码标准，用于将字符（字母、数字、符号）映射为数字。
+
+2.范围
+```js
+const asciiRange = {
+  controlCharacters: 0-31,     // 控制字符
+  printableCharacters: 32-126,  // 可打印字符
+  deleteCharacter: 127,         // 删除字符
+  total: 128                    // 2⁷ = 128
+};
+```
+
+3.转化流程
+```
+A -> 65 -> 01000001 -> 计算机存储
+```
+
+4.二进制与ascii与base64
+```
+原始数据 → 二进制表示 → ASCII 字符表示 → Base64 编码
+```
+
+### EncodeURIComponent
+一句话总结：把url上的中文、空格、字符（/ & ? = # @ + : , ;）变成浏览器能安全传输的URL编码格式。
+
+### URL对象
+是 内存对象 和 浏览器加载器 之间的连接桥梁，生成一个指向内存对象的临时URL，需要手动释放。
+|特性|说明|
+|---|---|
+| 指向原对象 |URL直接引用内存中的Blob，不复制数据|
+| 同源策略 | 生成的URL属于当前页源，仅当前页可用 |
+| 临时性 | 关闭页面或手动撤销后失效 |
+| 协议 | 使用blob:协议 非http: 或file： |
+
+为啥不用base64？
+|场景 |URL.createObjectURL | base64 Data URLs |
+|---|---|---|
+| 大文件 | 低内存 | 高内存（字符串复制） |
+| 图片视频渲染 | 快（直接解码） | 慢（解+33%膨胀） |
+|重复使用| 同引用 | 每次生成新的|
+|内存管理|手动撤销|随变量释放|
+```js
+let png = new Blob([data],{type:'img/png'})
+const objUrl = URL.createObjectURL(png)
+
+// eg.2
+videoInput.addEventListener('change',(e)=>{
+  let f = e.target.files[0]
+  let url = URL.createObjectURL(f);
+ let dom = docuent.getElementById('player')
+  dom.url = url;
+  dom.onLoad =()=> URL.revokeObjectURL(url)
+})
+```
