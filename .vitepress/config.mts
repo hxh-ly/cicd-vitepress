@@ -131,6 +131,10 @@ export default withMermaid(
               link: "/base-js",
             },
             {
+              text: "TypeScript",
+              link: "/typescript",
+            },
+            {
               text:'Next',
               link:'/nextjs'
             }

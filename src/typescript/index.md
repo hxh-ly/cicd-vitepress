@@ -92,3 +92,40 @@ interface Person {
 }
 type PersonKeys = keyof Person; // "name"|'age'
 ```
+
+## 题目
+
+1. 实现一个type类型，用于约束特殊时间格式的字符串
+```ts
+/**
+ * 例子
+ * ForateDate<"DD-MM-YY">
+ * 允许的字符串为
+ * const date:Formate<"DD-MM-YY"> = "12-12-2024" | "12-02-2024"
+ * 不允许的字符串为
+ * const date:Formate<"DD-MM-YY"> = "122-12-2024"
+ */
+
+type DelimiterEnum = '-'|':'
+type Num = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+type Num2 = Num | 0
+type DD = `${0}${Num}`|`${1}${Num}`|`${2}${Num}`|`${3}${0 | 1}` 
+type MM = `${0}${Num}`| `${1}${1|2}`
+type YY = `19${Num2}${Num2}`|`20${Num2}${Num2}`
+
+
+type GetStr<T extends string> = 
+T extends 'DD'? DD : 
+T extends 'MM'? MM :
+T extends 'YY'? YY :
+never
+
+type sp = '-'|':';
+type FormateDate<T extends string> = T extends `${infer A}${ sp}${infer B}${sp}${infer C}`
+? T extends `${A}${infer spd}${B}${infer csp}${C}` 
+? `${GetStr<A>}${spd}${GetStr<B>}${csp}${GetStr<C>}`: never:
+never;
+
+const a: FormateDate<'DD-MM-YY'> = '12-12-2024'
+```
