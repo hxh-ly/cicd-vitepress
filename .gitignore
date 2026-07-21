@@ -4,6 +4,10 @@ node_modules
 
 /.vitepress/dist/
 
-# 原始录屏保留本地即可，仓库只提交可浏览器播放的 mp4
+# 原始录屏保留本地即可
 *.MOV
 *.mov
+
+# 作品集大视频只放 OSS，不要进仓库
+src/public/portfolio/*.mp4
+src/public/portfolio/*.webm

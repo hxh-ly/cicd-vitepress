@@ -7,9 +7,9 @@ export type WorkItem = {
   id: string
   title: string
   summary: string
-  /** 封面图，放在 src/public/portfolio/ 下，路径形如 /portfolio/xxx.png */
+  /** 封面图：相对路径 /portfolio/xxx.png，或完整 OSS/CDN URL */
   cover?: string
-  /** 演示视频，支持 mp4 / webm，路径形如 /portfolio/xxx.mp4 */
+  /** 演示视频：大文件建议用 OSS 直链，避免进 Git；也支持 /portfolio/xxx.mp4 */
   video?: string
   /** 为 true 时不在作品集页展示 */
   hidden?: boolean
@@ -18,10 +18,13 @@ export type WorkItem = {
   highlights?: string[]
 }
 
+const OSS_PORTFOLIO =
+  'https://axuaxu-blog.oss-cn-shanghai.aliyuncs.com/blog/portfolio'
+
 /**
  * 作品集数据：新增作品只需往数组里加一项。
- * 图片 / 视频放到 src/public/portfolio/，再用 /portfolio/文件名 引用。
- * 注意：VitePress base 为 /blog，组件里会用 withBase 自动补全路径。
+ * 小图可放 src/public/portfolio/，路径 /portfolio/xxx.png（withBase 自动加 /blog）。
+ * 大视频请直接上传 OSS，这里填完整 URL，勿提交进仓库。
  */
 export const works: WorkItem[] = [
   {
@@ -29,7 +32,7 @@ export const works: WorkItem[] = [
     title: 'AI 讲题视频',
     summary:
       '作业工具场景下的 AI 讲题 H5：结合题目与视频讲解，支持灰度环境调试与多种讲题页形态，面向移动端学习体验。',
-    video: '/portfolio/three-teach.mp4',
+    video: `${OSS_PORTFOLIO}/three-teach.mp4`,
     tags: ['H5', 'AI', '教育'],
     links: [
       {
@@ -44,7 +47,7 @@ export const works: WorkItem[] = [
     title: '三维教学演示',
     summary:
       '三维教学相关演示录屏，展示交互讲解与页面效果，可直接在本页播放。',
-    video: '/portfolio/ai-teacher.mp4',
+    video: `${OSS_PORTFOLIO}/ai-teacher.mp4`,
     tags: ['H5', '教学', '演示'],
     highlights: ['本页可直接播放演示视频'],
   },

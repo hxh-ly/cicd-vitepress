@@ -22,7 +22,10 @@ const rates = reactive<Record<string, number>>(
 )
 
 function assetUrl(path?: string) {
-  return path ? withBase(path) : undefined
+  if (!path) return undefined
+  // OSS / 外链直链不要加站点 base
+  if (/^https?:\/\//i.test(path)) return path
+  return withBase(path)
 }
 
 function hasMedia(work: WorkItem) {
