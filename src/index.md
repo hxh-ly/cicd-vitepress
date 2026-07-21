@@ -11,11 +11,11 @@ hero:
     alt: helloWorld
   actions:
     - theme: brand
+      text: 作品集
+      link: /project/
+    - theme: alt
       text: 快速开始
       link: /markdown-examples
-    - theme: alt
-      text: about
-      link: /api-examples
 
 features:
   - title: 前端开发
@@ -24,7 +24,8 @@ features:
     details: 以Node.js、next.js为主，涉及接口实现、运维部署、nginx/docker/CI、CD 等
   - title: 计算机基础(cs)
     details: 数据结构与算法、leetcode 刷题记录、设计模式、HTTP、Git、单元测试等
-  - title: 项目
-    details: 以各自丰富的前端项目组成，追求更好的视觉效果、更好流畅的用户体验。
+  - title: 作品集
+    details: 精选个人项目与实践作品，含在线预览、源码与演示资源，可直接分享给面试官查看。
+    link: /project/
 ---
 

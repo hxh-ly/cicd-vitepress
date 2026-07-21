@@ -3,3 +3,7 @@ node_modules
 /.vitepress/cache/
 
 /.vitepress/dist/
+
+# 原始录屏保留本地即可，仓库只提交可浏览器播放的 mp4
+*.MOV
+*.mov

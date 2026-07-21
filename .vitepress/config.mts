@@ -121,6 +121,7 @@ export default withMermaid(
         provider: "local",
       },
       nav: [
+        { text: "作品集", link: "/project/" },
         {
           text: "前端基础",
           items: [
