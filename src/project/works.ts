@@ -29,7 +29,7 @@ export const works: WorkItem[] = [
     title: 'AI 讲题视频',
     summary:
       '作业工具场景下的 AI 讲题 H5：结合题目与视频讲解，支持灰度环境调试与多种讲题页形态，面向移动端学习体验。',
-    video: '/portfolio/ai-teacher.mp4',
+    video: '/portfolio/three-teach.mp4',
     tags: ['H5', 'AI', '教育'],
     links: [
       {
@@ -44,7 +44,7 @@ export const works: WorkItem[] = [
     title: '三维教学演示',
     summary:
       '三维教学相关演示录屏，展示交互讲解与页面效果，可直接在本页播放。',
-    video: '/portfolio/three-teach.mp4',
+    video: '/portfolio/ai-teacher.mp4',
     tags: ['H5', '教学', '演示'],
     highlights: ['本页可直接播放演示视频'],
   },
