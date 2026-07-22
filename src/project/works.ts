@@ -37,6 +37,21 @@ export const works: WorkItem[] = [
     highlights: ['本页可直接播放演示视频'],
   },
   {
+    id: 'quality-control-dashboard',
+    title: '质量控制可视化看板',
+    summary:
+      '配合 Figma 设计落地的质量控制 Dashboard：数据卡片、图表与筛选交互。本项目主要由 AI 辅助生成完成，用于验证设计到可视化页面的落地效率。',
+    cover: '/portfolio/quality-control-dashboard.png',
+    tags: ['可视化', 'Dashboard', 'AI 生成'],
+    links: [
+      {
+        label: '在线预览',
+        url: 'https://hxh-ly.github.io/quality-control-dashboard/',
+      },
+    ],
+    highlights: ['基于 Figma 设计实现', '主要由 AI 生成', '支持在线预览'],
+  },
+  {
     id: 'wrong-book',
     title: '错题本',
     summary:
