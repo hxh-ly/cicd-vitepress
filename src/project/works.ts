@@ -28,6 +28,24 @@ const OSS_PORTFOLIO =
  */
 export const works: WorkItem[] = [
   {
+    id: 'use-figma',
+    title: 'Figma 使用演示',
+    summary:
+      'Figma 相关操作与协作流程演示录屏，展示设计交付与组件使用等实际工作场景。',
+    video: `${OSS_PORTFOLIO}/use-figma.mp4`,
+    tags: ['Figma', '设计', '演示'],
+    highlights: ['本页可直接播放演示视频'],
+  },
+  {
+    id: 'wrong-book',
+    title: '错题本',
+    summary:
+      '错题本相关产品演示录屏，展示错题收录、复习与练习等学习闭环体验。',
+    video: `${OSS_PORTFOLIO}/wrong-book.mp4`,
+    tags: ['H5', '教育', '演示'],
+    highlights: ['本页可直接播放演示视频'],
+  },
+  {
     id: 'ai-video',
     title: 'AI 讲题视频',
     summary:

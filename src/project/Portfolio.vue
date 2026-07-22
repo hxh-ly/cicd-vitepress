@@ -7,6 +7,8 @@ const SPEED_OPTIONS = [1, 1.25, 1.5, 2, 2.5] as const
 
 /** 较长视频默认用更高倍速 */
 const DEFAULT_RATES: Record<string, number> = {
+  'use-figma': 1.5,
+  'wrong-book': 1.5,
   'ai-video': 2,
   'three-teach': 1.5,
 }
