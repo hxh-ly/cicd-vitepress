@@ -28,6 +28,26 @@ const OSS_PORTFOLIO =
  */
 export const works: WorkItem[] = [
   {
+    id: 'plusecube',
+    title: '微习惯 Plusecube',
+    summary:
+      '微习惯打卡 H5：以简洁的打卡与记录闭环帮助养成小习惯，移动端优先，可在线体验。',
+    cover: '/portfolio/plusecube.png',
+    video: `${OSS_PORTFOLIO}/plusecube.mp4`,
+    tags: ['H5', '微习惯', '演示'],
+    links: [
+      {
+        label: '门户网站',
+        url: 'https://www.axuaxu.top/',
+      },
+      {
+        label: '微习惯 H5',
+        url: 'https://www.axuaxu.top/plusecube-app/',
+      },
+    ],
+    highlights: ['本页可直接播放演示视频', '支持在线体验'],
+  },
+  {
     id: 'use-figma',
     title: 'Figma 使用演示',
     summary:
