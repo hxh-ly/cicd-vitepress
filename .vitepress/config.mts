@@ -35,13 +35,13 @@ const webpackCofig = [
     link: "front-eng/vite-index",
   },
   {
-    text:'组件设计',
-    link:'front-eng/component-repo'
+    text: "组件设计",
+    link: "front-eng/component-repo",
   },
   {
-    text:'测试',
-    link:'front-eng/test/test'
-  }
+    text: "测试",
+    link: "front-eng/test/test",
+  },
 ];
 const reactConfig = [
   { text: "开始", link: "react/index" },
@@ -79,11 +79,13 @@ const backEndConfig = [
   { text: "nest文件上传", link: "back-end/nest_upload" },
   { text: "nest", link: "back-end/nest" },
   { text: "Docker", link: "back-end/docker" },
+  { text: "消息队列", link: "back-end/mq" },
+  {text:"node+puppeteer并发打印服务",link:'back-end/project-puppeteer'}
 ];
 const mobileConfig = [
   { text: "web-适配", link: "mobile/rem.md" },
   { text: "小程序", link: "mobile/mini-app.md" },
-  {text:"electron",link:"electron/index.md"}
+  { text: "electron", link: "electron/index.md" },
 ];
 const htmlConfig = [{ text: "html", link: "interview/html-interview" }];
 const microFrontend = [
@@ -103,6 +105,12 @@ const cssConfig = [
   {
     text: "CSS",
     link: "css/index",
+  },
+];
+const AiConfig = [
+  {
+    text: "大模式面试题",
+    link: "ai/interview",
   },
 ];
 export default withMermaid(
@@ -136,9 +144,9 @@ export default withMermaid(
               link: "/typescript",
             },
             {
-              text:'Next',
-              link:'/nextjs'
-            }
+              text: "Next",
+              link: "/nextjs",
+            },
           ],
         },
         {
@@ -154,11 +162,15 @@ export default withMermaid(
           items: backEndConfig,
         },
         {
-          text:'跨端',
-          items:[...mobileConfig]
-        }
+          text: "跨端",
+          items: [...mobileConfig],
+        },
       ],
       sidebar: [
+        {
+          text: "AI",
+          items: AiConfig,
+        },
         {
           text: "前端工程化",
           items: webpackCofig,
@@ -206,5 +218,5 @@ export default withMermaid(
         copyright: "Copyright © 2022-present axuaxu",
       },
     },
-  })
+  }),
 );
