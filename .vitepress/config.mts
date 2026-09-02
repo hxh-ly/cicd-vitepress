@@ -112,6 +112,10 @@ const AiConfig = [
     text: "大模式面试题",
     link: "ai/interview",
   },
+  {
+    text:'RAG',
+    link:'ai/rag',
+  }
 ];
 export default withMermaid(
   defineConfig({
@@ -129,6 +133,7 @@ export default withMermaid(
         provider: "local",
       },
       nav: [
+        {text:'AI',link:'ai/interview'},
         { text: "作品集", link: "/project/" },
         {
           text: "前端基础",
