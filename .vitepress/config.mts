@@ -78,6 +78,7 @@ const backEndConfig = [
   { text: "redis", link: "back-end/redis" },
   { text: "nest文件上传", link: "back-end/nest_upload" },
   { text: "nest", link: "back-end/nest" },
+  { text: "Nest 微服务", link: "back-end/nest-micro" },
   { text: "Docker", link: "back-end/docker" },
   { text: "消息队列", link: "back-end/mq" },
   {text:"node+puppeteer并发打印服务",link:'back-end/project-puppeteer'}
