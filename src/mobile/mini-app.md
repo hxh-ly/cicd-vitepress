@@ -114,15 +114,93 @@ sequenceDiagram
 
 ```js
 wx.requestPayment({
-    timeStamp:'', // 时间戳
-    nonceStr:'', // 随机字符串
-    package:'', // 统一下单接口返回的perpay_id
-    signType:'',// 签名类型
-    paySign:'',// 签名
-    success(){}, //成功回调
+    timeStamp:'', // 时间戳 must
+    nonceStr:'', // 随机字符串 must
+    package:'', // 统一下单接口返回的perpay_id must
+    signType:'RSA',// 签名类型 must
+    paySign:'',// 商户私钥对参数签名 must
+    success(){}, //成功回调  轮训调后台的订单接口，查看是否支付成功
     fail(){} // 失败回调
     compelete(){} // 结束回调
 })
+```
+
+```ts
+// 后台生成签名参数miniprogram
+import { Injectable } from '@nestjs/common';
+import { WechatPay, WechatPayConfig } from '@wechatpay-node-v3/serve';
+import * as fs from 'fs';
+
+@Injectable()
+export class WxPayService {
+  private readonly wxPay: WechatPay;
+  private readonly mchid = '你的商户号';
+  private readonly appId = '小程序AppID';
+
+  constructor() {
+    const config: WechatPayConfig = {
+      mchid: this.mchid,
+      // 商户私钥，读取pem文件
+      privateKey: fs.readFileSync('./cert/apiclient_key.pem', 'utf-8'),
+      // 微信支付平台证书
+      cert: fs.readFileSync('./cert/platform_cert.pem', 'utf-8'),
+    };
+    this.wxPay = new WechatPay(config);
+  }
+
+  /**
+   * 创建小程序支付，返回给 wx.requestPayment 的参数
+   * @param outTradeNo 商户内部订单号
+   * @param total 金额，单位分
+   * @param description 商品描述
+   */
+  async createMiniProgramPay(outTradeNo: string, total: number, description: string) {
+    // ========== 1、调用微信V3接口 创建预支付订单，获取 prepay_id ==========
+    const res = await this.wxPay.transactions_jsapi({
+      appid: this.appId,
+      mchid: this.mchid,
+      description,
+      out_trade_no: outTradeNo,
+      amount: {
+        total,
+        currency: 'CNY',
+      },
+      payer: {
+        // 需要用户openid，小程序端拿到传给后端
+        openid: '用户的openid',
+      },
+      notify_url: 'https://xxx.com/wxpay/notify', // 支付回调地址，公网可访问 https
+    });
+
+    // res.prepay_id 就是预支付ID
+    const prepayId = res.prepay_id;
+
+    // ========== 2、组装前端需要的基础参数 ==========
+    const timeStamp = String(Math.floor(Date.now() / 1000)); // ⚠️秒，字符串！！
+    const nonceStr = this.wxPay.nonceStr(); // sdk生成随机串
+    const packageStr = `prepay_id=${prepayId}`;
+
+    // ========== 3、V3签名：生成 paySign ==========
+    /**
+     * V3小程序支付签名拼接格式
+     * appid\n
+     * timeStamp\n
+     * nonceStr\n
+     * package\n
+     */
+    const signContent = `${this.appId}\n${timeStamp}\n${nonceStr}\n${packageStr}\n`;
+    const paySign = this.wxPay.rsaSign(signContent);
+
+    // signType V3固定 RSA
+    return {
+      timeStamp,
+      nonceStr,
+      package: packageStr,
+      signType: 'RSA',
+      paySign,
+    };
+  }
+}
 ```
 
 ### 支付安全
@@ -257,9 +335,23 @@ wx.requestPayment({
 
 1. 小程序打开： onLaunch -> onShow -> onLoad -> onShow -> onReady
 2. 进入新页面： onHide -> onLoad -> onShow -> onReady
-3. 返回上一页： onUnload -> onShow
-4. 小程序切后台:onHide
-5. 小程序重启： onLaunch -> onShow
+3. 返回上一页： onUnload -> onDetached -> onShow
+4. 小程序切后台: 页面onHide -> 应用 onHide
+5. 切回前台： 应用onShow -> 页面 onShow
+6. 小程序重启： onLaunch -> onShow
+7. 组件在页面：onLoad -> created -> attached -> onShow -> 组件onready -> onready 
+
+高频面试问题整理：
+Q1. created 和 attached的区别？
+
+created: 实例刚创建，还没进入DOM树，properties还没完全就绪，不能操作DOM
+
+attached： 组件挂载到DOM树，属性已经就绪，可以操作节点、setData。业务初始化优先写在attached
+
+Q2. attached和ready区别？
+
+attached：组件挂在到DOm
+ready：组件+所有子组件全部渲染布局完成。适合获取元素尺寸。
 
 ## 说说对小程序的理解？优缺点
 
@@ -471,13 +563,14 @@ export const cartStore = observable({
 ```
 
 ```js
+import { createStoreBindings } from 'mobx-miniprogram-bindings'
 Page({
   onLoad() {
-    // 绑定 store 到组件
+    // 绑定 store 到组件  管家
     this.storeBindings = createStoreBindings(this, {
       store: cartStore,
       fields: ["items", "totalPrice"], // 映射需要的状态和计算属性
-      actions: ["addItem", "removeItem"], // 映射需要的 action
+      actions: ["addItem", "removeItem"], // 映射需要的 action，被管家挂载到this身上的工具函数
     });
   },
 
@@ -551,3 +644,42 @@ Page( connect({
   }
 }
 ```
+
+## 小程序如何操作DOM
+DOM存在【渲染层View】；逻辑层没有DOM、window、document对象，拿不到真实DOM引用，不能直接读取DOM对象。`wx.createSelectorQuery()`获取节点属性完整远离
+```js
+Page({
+  onReady(){
+    const query = wx.createSelectorQuery()
+    query.select('#box').boundingClientRect(rect=>{ console.log(rect.width,rect.top)}) 
+    query.exec()
+  }
+})
+/* 
+完整链路
+1. 逻辑层创建query对象，
+2. 调用exec 把查询指令（选择器、需要哪些字段）序列化成JSON，交给Native桥。
+3. Native把这条消息转发给对应页面的渲染层Webview
+4. Webview内部执行document.querySelector('#box') 读取DOM的布局，位置，大小属性
+5. 将读到的数据提取为普通JSON对象，通过Native桥，序列化回逻辑层
+6. 逻辑层收到JSON，执行回调函数，拿到rect数据
+*/
+```
+
+## setData底层完整链路
+```js
+this.setData({name:'hello'})
+/* 
+完整链路
+1.逻辑层：只做diff差分，不会操作Dom；把变更路径+新值打包JSON
+2.交给Native桥，异步消息发送渲染层
+3.webview接收json，在渲染层内部执行dom更新
+*/
+```
+浏览器DOM vs 小程序 模型对比
+|项目|浏览器网页|微信小程序|
+|---|---|---|---|
+|js与DOM线程|同一个thread，js可以直接操作dom拿到引用对象，读写修改|逻辑层、渲染层分离|
+|获取元素|document.querySelector|createSelectorQuery,返回仅可读|
+|修改DOM|el.style el.setAttribute|逻辑层只能下发数据，渲染层完成DOM变更|
+|通信|内存直接访问|全部JSON序列化跨线程通信，有性能开销，避免高频setData和exec|
