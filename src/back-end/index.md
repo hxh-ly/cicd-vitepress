@@ -627,3 +627,6 @@ app.listen(3000, () => {});
 
 - 监控工具： 使用 APM（应用性能监控）工具，如 New Relic, Datadog, 或开源的 clinic.js、0x 来持续监控应用性能，定位瓶颈（是事件循环延迟？还是内存问题？）。
 - 分析瓶颈： 定期进行压力测试（如使用 autocannon、wrk 工具），找出系统的性能拐点。
+
+## 概念
+ansible、splunk、api安全模式（OAuth2/JWT、RBAC） 密钥管理、审计日志、容错模式、支付（Omise、Stripe、Paypal）、elysiajs、h3js、bun.js、deno.js 

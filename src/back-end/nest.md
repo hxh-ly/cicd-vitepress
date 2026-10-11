@@ -253,6 +253,170 @@ Nest 提供了 AOP （Aspect Oriented Programming 面向切面编程）的机制
 - 管道：主要用于数据转换（string->number）,数据校验。 （数据进来前洗一洗、验一验）
 - 异常过滤器：处理捕获未处理的异常，并发送适当的响应。（只关心报错了怎么办）
 
+### 请求执行顺序
+
+```
+Middleware → Guards → Interceptors(前) → Pipes → Controller
+→ Interceptors(后，可改响应) → Exception Filters
+```
+
+**Interceptor 在路由处理前后都能插手；Middleware 只在请求进 Nest 路由管道之前。**
+
+### Interceptor 正确用法
+
+核心是实现 `NestInterceptor`，用 `next.handle()` 拿到 **Observable**，可在前后加工：
+
+```ts
+import {
+  CallHandler,
+  ExecutionContext,
+  Injectable,
+  NestInterceptor,
+} from '@nestjs/common'
+import { Observable, map, tap } from 'rxjs'
+
+@Injectable()
+export class TransformInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const now = Date.now()
+    // 请求到达 Controller 之前
+    return next.handle().pipe(
+      // 响应返回之后（还能改 body）
+      map((data) => ({ code: 0, data, message: 'ok' })),
+      tap(() => console.log(`耗时 ${Date.now() - now}ms`)),
+    )
+  }
+}
+```
+
+绑定方式：
+
+```ts
+// 全局
+app.useGlobalInterceptors(new TransformInterceptor())
+
+// Controller / 方法
+@UseInterceptors(TransformInterceptor)
+@Get()
+findAll() {
+  return this.service.findAll()
+}
+```
+
+适合：统一响应包装、耗时日志、缓存、超时、转换返回值、绑定到具体路由/方法。
+
+### Middleware 用法
+
+更像 Express 中间件，拿 `req/res/next`，**看不到 Controller 返回值**：
+
+```ts
+import { Injectable, NestMiddleware } from '@nestjs/common'
+import { Request, Response, NextFunction } from 'express'
+
+@Injectable()
+export class LoggerMiddleware implements NestMiddleware {
+  use(req: Request, res: Response, next: NextFunction) {
+    console.log(req.method, req.url)
+    next()
+  }
+}
+
+// module 里配置
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(LoggerMiddleware).forRoutes('*')
+  }
+}
+```
+
+也可用函数式：`app.use(cors())`、`app.use(helmet())`。
+
+适合：CORS、cookie 解析、请求体解析、早期鉴权标记、和 Express 生态对接。
+
+### Interceptor vs Middleware 对比
+
+| | Middleware | Interceptor |
+|---|---|---|
+| 执行时机 | 很早，进 Guards 之前 | Controller 前后都可 |
+| 能否改响应体 | 难（要自己劫持 res） | 容易（`map` Observable） |
+| DI / 作用域 | 可以，但偏全局/路径级 | 全局 / Controller / 方法，更细 |
+| 上下文 | `req/res/next` | `ExecutionContext`（HTTP/RPC/WS 都行） |
+| 异常 | 需自己处理或丢给后面 | 可配合 RxJS，后还有 Filter |
+
+怎么选：
+
+- 只要「请求进来先处理一下」→ **Middleware**
+- 要「包一层统一返回 / 记接口耗时 / 改出参」→ **Interceptor**
+- 权限放行 → **Guard**（别硬塞进中间件当唯一方案）
+- 参数校验 → **Pipe**
+
+一句话：**横切请求入口用中间件；横切业务结果用拦截器。**
+
+### ExecutionContext 怎么理解
+
+`ExecutionContext` 是 Nest 在 Guard / Interceptor / Pipe / Filter 里给你的**当前请求上下文包装器**。
+
+可以把它理解成：
+
+> 不管现在是 HTTP、RPC 还是 WebSocket，Nest 都把「这次调用发生在哪」塞进同一个对象里，让切面代码不用关心底层协议差异。
+
+它继承自 `ArgumentsHost`，常见能力：
+
+| 方法 | 作用 |
+|---|---|
+| `getType()` | 当前协议：`http` / `rpc` / `ws` |
+| `getClass()` | 正在处理的 Controller 类 |
+| `getHandler()` | 正在处理的路由方法 |
+| `switchToHttp()` | 切到 HTTP，再 `getRequest()` / `getResponse()` |
+| `switchToRpc()` / `switchToWs()` | 微服务 / WebSocket 场景取数据 |
+| `getArgs()` | 拿到底层原始参数列表 |
+
+#### 为什么需要它
+
+Middleware 直接拿 Express 的 `req/res`；但 Guard、Interceptor 要同时支持：
+
+- HTTP REST
+- 微服务 RPC
+- WebSocket
+
+所以 Nest 不直接给你 `req`，而是给 `ExecutionContext`，你按协议再取。
+
+#### 常见用法
+
+```ts
+inject(context: ExecutionContext) {
+  // 1. 当前是不是 HTTP
+  if (context.getType() === 'http') {
+    const req = context.switchToHttp().getRequest()
+    const user = req.user
+  }
+
+  // 2. 拿到当前 Controller / handler，常配合 Reflector 读自定义装饰器元数据
+  const controller = context.getClass()   // UserController
+  const handler = context.getHandler()    // findAll
+
+  // 例如：@Roles('admin') 写在方法上，Guard 里这样取
+  // const roles = this.reflector.get<string[]>('roles', handler)
+}
+```
+
+Interceptor 里同样：
+
+```ts
+intercept(context: ExecutionContext, next: CallHandler) {
+  const req = context.switchToHttp().getRequest()
+  console.log(req.method, req.url, context.getHandler().name)
+  return next.handle()
+}
+```
+
+#### 和 ArgumentsHost 的关系
+
+- **ArgumentsHost**：更底层，Filter 里常见，主要用来按协议取 `req/res` 或 RPC data。
+- **ExecutionContext**：在 Host 基础上多了 `getClass()` / `getHandler()`，适合 Guard、Interceptor 做「按路由/方法」的权限或元数据判断。
+
+一句话：**ExecutionContext = 这次请求跑到了哪个 Controller 的哪个方法，以及底层 req/res（或其它协议数据）的统一入口。**
+
 ## 装饰器
 - 路由类：控制请求路径、方法（Controller 用）
 - 参数提取类：从请求里拿数据（@Body、@Query 等）
