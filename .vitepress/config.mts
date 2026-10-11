@@ -115,6 +115,14 @@ const AiConfig = [
   {
     text:'RAG',
     link:'ai/rag',
+  },
+  {
+    text:'Agent',
+    link:'ai/agent',
+  },
+  {
+    text:'Agent记忆管理',
+    link:'ai/agent-memory',
   }
 ];
 export default withMermaid(
