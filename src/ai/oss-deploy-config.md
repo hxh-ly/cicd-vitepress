@@ -31,5 +31,10 @@
 ## 工作流说明
 
 - 当代码推送到 `main` 分支时，会自动触发构建和部署流程
-- 构建完成后，静态资源会自动上传到指定的 OSS bucket
+- 构建完成后，静态资源会自动上传到指定的 OSS bucket 的 `/blog` 目录
 - 可以通过 GitHub Actions 页面手动触发部署流程
+
+访问示例：
+
+- 博客：`https://axuaxu.top/blog/index.html`
+- 作品集：`https://axuaxu.top/blog/project/index.html`
