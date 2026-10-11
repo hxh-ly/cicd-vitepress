@@ -2783,6 +2783,153 @@ GraphQL 对 React 应用数据获取的优化核心在于：
 - 轻量无依赖，项目体积良好
 - 良好的 ts 支持
 
+|库|范式|状态修改方式|大型多人团队|高频交互画布|调试能力|样本代码|
+|---|---|---|---|---|---|---|
+|redux|单向数据流+不可变|action+reducer|最优|一般|5🌟|中等|
+|Zustand|轻量容器、函数式|set函数更新（推荐不可变）|中等|良好|3🌟|少|
+|Mobx|响应式自动追踪|action内直接mutate|小规模|最优|2🌟|少|
+
+```ts
+//store/slices/userSlice.ts
+import { createSlice, PayloadAction } from '@reduxjs/toolkit'
+
+type UserState = {
+  name: string
+  token: string
+}
+
+const initialState: UserState = {
+  name: '',
+  token: '',
+}
+
+const userSlice = createSlice({
+  name: 'user',
+  initialState,
+  reducers: {
+    setName(state, action: PayloadAction<string>) {
+      state.name = action.payload
+    },
+    login(state, action: PayloadAction<{ name: string; token: string }>) {
+      state.name = action.payload.name
+      state.token = action.payload.token
+    },
+    logout() {
+      return initialState
+    },
+  },
+})
+
+export const { setName, login, logout } = userSlice.actions
+export default userSlice.reducer
+
+//store/index.ts
+import { configureStore } from '@reduxjs/toolkit'
+import userReducer from './slices/userSlice'
+
+export const store = configureStore({
+  reducer: {
+    user: userReducer,
+  },
+})
+
+export type RootState = ReturnType<typeof store.getState>
+export type AppDispatch = typeof store.dispatch
+```
+```tsx
+//main.tsx
+import { Provider } from 'react-redux'
+import { store } from './store'
+
+ReactDOM.createRoot(root).render(
+  <Provider store={store}>
+    <App />
+  </Provider>
+)
+```
+```tsx
+import { useSelector, useDispatch } from 'react-redux'
+import { RootState } from './store'
+import { setName, login, logout } from './store/slices/userSlice'
+
+export function UserDemo() {
+  const dispatch = useDispatch()
+  const { name, token } = useSelector((s: RootState) => s.user)
+
+  return (
+    <div>
+      <p>name: {name}</p>
+      <p>token: {token}</p>
+      <button onClick={() => dispatch(setName('Jack'))}>改名</button>
+      <button onClick={() => dispatch(login({ name: 'Tom', token: 'xxx' }))}>登录</button>
+      <button onClick={() => dispatch(logout())}>登出</button>
+    </div>
+  )
+}
+```
+
+```ts
+// npm install mobx mobx-react-lite
+// store/UserStore.ts
+import { makeAutoObservable } from 'mobx'
+export class UserStore {
+  name = ''
+  token = ''
+
+  constructor() {
+    makeAutoObservable(this)
+  }
+
+  setName = (name: string) => {
+    this.name = name
+  }
+
+  login = (name: string, token: string) => {
+    this.name = name
+    this.token = token
+  }
+
+  logout = () => {
+    this.name = ''
+    this.token = ''
+  }
+}
+// 根store + Context注入
+import { createContext, useContext } from 'react'
+import { UserStore } from './UserStore'
+
+class RootStore {
+  userStore = new UserStore()
+}
+
+const rootStore = new RootStore()
+const StoreContext = createContext<RootStore>(rootStore)
+
+export const useStores = () => useContext(StoreContext)
+// 也可以不context 直接 直接单例export const userStore = new UserStore()
+```
+```jsx
+import { observer } from 'mobx-react-lite'
+import { useStores } from './stores'
+
+// observer 收集组件内依赖的响应式变量
+export const UserDemo = observer(() => {
+  const { userStore } = useStores()
+  const { name, token } = userStore
+
+  return (
+    <div>
+      <p>name: {name}</p>
+      <p>token: {token}</p>
+      <button onClick={() => userStore.setName('Jack')}>改名</button>
+      <button onClick={() => userStore.login('Tom', 'xxx')}>登录</button>
+      <button onClick={() => userStore.logout()}>登出</button>
+    </div>
+  )
+})
+```
+
+
 ### React hooks 的实践
 
 常见问题
