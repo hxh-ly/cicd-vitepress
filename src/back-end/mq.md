@@ -459,3 +459,402 @@ BullModule.registerQueue({
 2. Worker 挂掉：正在执行任务 stall，任务退回队列，存活 worker 重新执行；全部 worker 挂，任务保存在 Redis 等待恢复。
 3. DLQ 就是普通 Queue；DLQ 消费者挂，任务堆积 Redis，恢复后消费；可以写代码手动重放死信任务。
 4. 生产最大风险来源：Redis 丢失数据、任务没有幂等导致重复执行、任务堆积打爆 Redis、快慢任务共用队列互相阻塞。
+
+
+### Kafka
+> Kafka 的一条铁律：**同一个消费者组里，1 个分区 最多只能分配给组内 1 个 consumer 实例**。
+> 分区是消息并行的最小单元。分区数决定了这个消费组最多能有多少个并发消费实例。
+
+> 多个系统共同使用的“持续追加的事件记录簿”。 业务不断把发生的事情写进去，其他系统按自己的进度读取，处理后还可以回头重读。
+比如订单服务持续产生：
+```
+10:00 订单 A 已创建
+10:01 订单 B 已创建
+10:02 订单 A 已支付
+10:03 订单 B 已取消
+……不断有新事件进来
+```
+
+分布式流平台的理解
+1. 流：持续记录发生的事件。“订单已支付”是一条事件。通知服务读到它可以发消息，统计服务读到它可以计算销售额。同一份事件可以服务多个用途。
+2. 分布式：多台服务器共同存储和读取。Kafka 服务器叫 Broker。订单事件归入 orders 这个 Topic（主题），主题再拆成多个 Partition（分区），分布到不同 Broker，分摊读写压力。分区还可以保存副本，用于故障恢复。
+3. 平台：把事件发布、存储、订阅和持续处理连接起来。
+订单服务负责发布，Kafka 保存事件，各个消费应用独立处理；实时统计等计算由消费应用或 Kafka Streams 这样的处理库完成。
+
+```mermaid
+flowchart TB
+    Producer["Producer 生产者<br/>订单服务"] -->|"发布订单事件"| Topic
+
+    subgraph Cluster["Kafka 集群"]
+        Topic["Topic：order.created<br/>逻辑主题，拆成多个 Partition"]
+
+        subgraph Broker1["Broker 1"]
+            P0["Partition 0 · 主副本<br/>offset：0 → 1 → 2 → ..."]
+            P1Replica["Partition 1 · 跟随副本"]
+        end
+
+        subgraph Broker2["Broker 2"]
+            P1["Partition 1 · 主副本<br/>offset：0 → 1 → 2 → ..."]
+            P0Replica["Partition 0 · 跟随副本"]
+        end
+
+        Topic -->|"按 key 或分区策略写入"| P0
+        Topic -->|"按 key 或分区策略写入"| P1
+
+        P0 -.->|"复制数据"| P0Replica
+        P1 -.->|"复制数据"| P1Replica
+
+        Offsets["消费进度存储<br/>__consumer_offsets<br/>按 Group + Topic + Partition 保存"]
+    end
+
+    subgraph GroupA["Consumer Group A：通知服务"]
+        A1["Consumer A1<br/>负责 Partition 0"]
+        A2["Consumer A2<br/>负责 Partition 1"]
+    end
+
+    subgraph GroupB["Consumer Group B：统计服务"]
+        B1["Consumer B1<br/>负责 Partition 0 和 Partition 1"]
+    end
+
+    P0 -->|"A1 主动拉取"| A1
+    P1 -->|"A2 主动拉取"| A2
+    P0 -->|"B1 主动拉取"| B1
+    P1 -->|"B1 主动拉取"| B1
+
+    A1 -.->|"提交 P0 的消费进度"| Offsets
+    A2 -.->|"提交 P1 的消费进度"| Offsets
+    B1 -.->|"分别提交 P0、P1 的消费进度"| Offsets
+```
+#### 代码示例
+```shell
+npm i @nestjs/microservices kafkajs
+```
+初始化脚本 scripts/create-order-topic.mjs：
+```ts
+import { Kafka } from 'kafkajs';
+
+const kafka = new Kafka({
+  clientId: 'topic-admin',
+  brokers: (process.env.KAFKA_BROKERS ?? 'localhost:9092').split(','),
+});
+
+const admin = kafka.admin();
+const replicationFactor = Number(process.env.KAFKA_REPLICATION_FACTOR ?? 1);
+
+try {
+  await admin.connect();
+
+  const created = await admin.createTopics({
+    waitForLeaders: true,
+    topics: [
+      {
+        topic: 'orders.lifecycle',
+        numPartitions: 4, // P0、P1、P2、P3
+        replicationFactor,
+        configEntries: [
+          // 本地单副本允许 1；多副本示例要求至少 2 个同步副本。
+          // 配合 acks: -1，仍需等待当前 ISR 中的全部副本确认。
+          { name: 'min.insync.replicas', value: String(Math.min(2, replicationFactor)) },
+        ],
+      },
+    ],
+  });
+
+  console.log(created ? 'Topic 已创建' : 'Topic 已存在');
+
+  const metadata = await admin.fetchTopicMetadata({
+    topics: ['orders.lifecycle'],
+  });
+
+  console.dir(metadata, { depth: null });
+} finally {
+  await admin.disconnect();
+}
+```
+运行
+```Bash
+# 本地已有一个 Kafka Broker：使用 1 个副本
+node scripts/create-order-topic.mjs
+
+# 至少有 3 个可用 Broker 的集群：使用 3 个副本
+KAFKA_BROKERS=kafka1:9092,kafka2:9092,kafka3:9092 \
+KAFKA_REPLICATION_FACTOR=3 \
+node scripts/create-order-topic.mjs
+```
+2. 订单服务：用订单 ID 决定分区
+
+下面是一个用于观察分区行为的 HTTP 发布示例，省略真实订单数据库和支付流程。
+
+`src/orders.module.ts`
+```ts
+import {
+  Controller,
+  Inject,
+  Module,
+  OnModuleDestroy,
+  OnModuleInit,
+  Param,
+  Post,
+} from '@nestjs/common';
+import {
+  ClientKafka,
+  ClientsModule,
+  Transport,
+} from '@nestjs/microservices';
+import { Partitioners } from 'kafkajs';
+import { firstValueFrom } from 'rxjs';
+import { randomUUID } from 'node:crypto';
+
+const TOPIC = 'orders.lifecycle';
+
+@Controller('orders')
+class OrdersController implements OnModuleInit, OnModuleDestroy {
+  constructor(
+    @Inject('ORDER_KAFKA')
+    private readonly kafka: ClientKafka,
+  ) {}
+
+  async onModuleInit() {
+    await this.kafka.connect();
+  }
+
+  async onModuleDestroy() {
+    await this.kafka.close();
+  }
+
+  @Post(':orderId/created')
+  created(@Param('orderId') orderId: string) {
+    return this.publish(orderId, 'ORDER_CREATED');
+  }
+
+  @Post(':orderId/paid')
+  paid(@Param('orderId') orderId: string) {
+    return this.publish(orderId, 'ORDER_PAID');
+  }
+
+  private async publish(orderId: string, type: string) {
+    const event = {
+      eventId: randomUUID(),
+      orderId,
+      type,
+      occurredAt: new Date().toISOString(),
+    };
+
+    await firstValueFrom(
+      this.kafka.emit(TOPIC, {
+        key: orderId, // 关键：相同订单使用相同 key
+        value: event,
+      }),
+    );
+
+    return { published: true, event };
+  }
+}
+
+@Module({
+  imports: [
+    ClientsModule.register([
+      {
+        name: 'ORDER_KAFKA',
+        transport: Transport.KAFKA,
+        options: {
+          client: {
+            clientId: 'orders-producer',
+            brokers: (
+              process.env.KAFKA_BROKERS ?? 'localhost:9092'
+            ).split(','),
+          },
+
+          // 只发事件，不启动用于接收 RPC 响应的消费者
+          producerOnlyMode: true,
+
+          producer: {
+            allowAutoTopicCreation: false, // Topic 不存在时，不请求自动创建；应该提前创建好 ｜ true：允许自动创建，但还需要 Broker 允许自动创建。
+            createPartitioner: Partitioners.DefaultPartitioner, // 默认分区器-分区器会优先使用消息中的 partition；没有显式指定时，再根据 key 计算分区 ｜ MyPartitioner-自定义
+          },
+
+          send: { // 生产者等到什么程度，才认为写入成功
+            acks: -1, // 0-不等待 Broker 确认，无法据此确认消息是否成功写入。 ｜ 1-Leader 写入后确认，不等待 Follower 复制完成。 ｜ -1-等待当前 ISR 中的副本确认，也是 KafkaJS 的默认值
+          },
+        },
+      },
+    ]),
+  ],
+  controllers: [OrdersController],
+})
+export class OrdersModule {}
+```
+`src/main.ts`
+```ts
+import { NestFactory } from '@nestjs/core';
+import { OrdersModule } from './orders.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(OrdersModule);
+  app.enableShutdownHooks();
+  await app.listen(3000);
+}
+
+bootstrap();
+```
+默认分区器会根据 key 选择分区。分区数量、key 编码和分区策略不变时，同一订单的事件进入同一分区。 不要假定 "A" 一定映射到 P0，实际结果看消费者日志。
+
+3. 通知服务：配置消费者组的分区分配策略
+
+以下放在独立的通知服务 Nest 项目中。 `src/notification.module.ts`
+```ts
+import { Controller, Module } from '@nestjs/common';
+import {
+  Ctx,
+  EventPattern,
+  KafkaContext,
+  Payload,
+} from '@nestjs/microservices';
+
+interface OrderEvent {
+  eventId: string;
+  orderId: string;
+  type: string;
+  occurredAt: string;
+}
+
+@Controller()
+class NotificationController {
+  @EventPattern('orders.lifecycle')
+  async handleOrder(
+    @Payload() event: OrderEvent,
+    @Ctx() context: KafkaContext,
+  ) {
+    const message = context.getMessage();
+    const partition = context.getPartition();
+    const topic = context.getTopic();
+
+    // 示例中的业务处理：输出日志
+    console.log({
+      instance: process.env.INSTANCE_ID,
+      topic,
+      partition,
+      offset: message.offset,
+      key: message.key?.toString(),
+      event,
+    });
+
+    // 实际项目：在这里 await 业务处理完成。
+    // 使用 eventId 做持久化幂等；处理失败应抛出异常。
+
+    // 成功后保存“下一条要读取的位置”
+    await context.getConsumer().commitOffsets([
+      {
+        topic,
+        partition,
+        offset: (BigInt(message.offset) + 1n).toString(),
+      },
+    ]);
+  }
+}
+
+@Module({
+  controllers: [NotificationController],
+})
+export class NotificationModule {}
+```
+
+`src/main.ts`
+```ts
+import { NestFactory } from '@nestjs/core';
+import {
+  MicroserviceOptions,
+  Transport,
+} from '@nestjs/microservices';
+import { PartitionAssigners } from 'kafkajs';
+import { NotificationModule } from './notification.module';
+
+async function bootstrap() {
+  const app =
+    await NestFactory.createMicroservice<MicroserviceOptions>(
+      NotificationModule,
+      {
+        transport: Transport.KAFKA,
+        options: {
+          client: {
+            clientId: `notification-${process.env.INSTANCE_ID ?? '1'}`,
+            brokers: (
+              process.env.KAFKA_BROKERS ?? 'localhost:9092'
+            ).split(','),
+          },
+
+          consumer: {
+            // 同一个服务的多个实例使用相同 groupId
+            groupId: 'order-notification',
+            allowAutoTopicCreation: false, // 控制是否允许在查询不存在的 Topic 时请求自动创建，不控制是否创建消费者组。
+
+            // 把分区轮流分配给组内消费者
+            partitionAssigners: [PartitionAssigners.roundRobin], // 【 MyCustomAssigner，PartitionAssigners.roundRobin】
+          },
+
+          subscribe: {
+            // 没有有效已提交进度时，从最早保留的数据开始
+            fromBeginning: true,
+          },
+
+          run: {
+            autoCommit: false, // 上面的 handler 手动提交
+            partitionsConsumedConcurrently: 2, // 表示一个实例最多并发处理两个分区，不是创建两个分区。同一分区内的消息仍按顺序交给 handler；业务操作要 await，不要启动后立即返回。
+          },
+        },
+      },
+    );
+
+  app.enableShutdownHooks();
+  await app.listen();
+}
+
+bootstrap();
+```
+
+4.启动两个消费者，观察分区和offset
+```Bash
+INSTANCE_ID=1 npm run start
+
+# 另一个终端
+INSTANCE_ID=2 npm run start
+```
+然后向订单服务发送事件
+```Bash
+curl -X POST http://localhost:3000/orders/A/created
+curl -X POST http://localhost:3000/orders/A/paid
+curl -X POST http://localhost:3000/orders/B/created
+curl -X POST http://localhost:3000/orders/B/paid
+```
+可能的结果
+```
+实例 1：partition=0 offset=0 key=A ORDER_CREATED
+实例 1：partition=0 offset=1 key=A ORDER_PAID
+
+实例 2：partition=1 offset=0 key=B ORDER_CREATED
+实例 2：partition=1 offset=1 key=B ORDER_PAID
+```
+5.是否可以指定分区
+```ts
+await firstValueFrom(
+  this.kafka.emit('orders.lifecycle', {
+    partition: 2, // 明确写入 P2，优先于按 key 计算
+    key: orderId,
+    value: event,
+  }),
+);
+```
+
+KafkaContext 里面有什么（@Ctx () 拿到）
+```ts
+// ctx 是事件处理方法通过 @Ctx() 注入的 KafkaContext。
+ctx.getMessage(); // kafkajs原始消息对象：value, headers, key, timestamp
+ctx.getTopic(); // 当前消息所在topic名称
+ctx.getPartition(); // 分区号
+ctx.getMessage().offset; // offset位移（字符串）
+ctx.getConsumer(); // kafkajs consumer实例
+```
+选型建议
+1. 业务是**异步事件、日志、消息通知**：优先 `emit / @EventPattern`，纯 kafka 事件，没有回复 topic，简单稳定。
+2. 必须**同步等待返回结果**（像调用接口拿到计算结果）：才使用 `send / @MessagePattern`，注意回复 topic 分区配置问题。
+3. Kafka 天然适合事件驱动，**不推荐大量使用 messagePattern RPC**，这个是 Nest 封装出来的，不是 kafka 原生能力，有额外开销。
