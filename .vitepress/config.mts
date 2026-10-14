@@ -74,14 +74,16 @@ const leetdCode = [
   { text: "二分查找", link: "leetcode/search/index" },
 ];
 const backEndConfig = [
-  { text: "后端", link: "back-end/index" },
-  { text: "redis", link: "back-end/redis" },
-  { text: "nest文件上传", link: "back-end/nest_upload" },
-  { text: "nest", link: "back-end/nest" },
+  { text: "NodeJS", link: "back-end/index" },
+  { text: "Redis", link: "back-end/redis" },
+  { text: "Nest文件上传", link: "back-end/nest_upload" },
+  { text: "Nest", link: "back-end/nest" },
   { text: "Nest 微服务", link: "back-end/nest-micro" },
+  { text:'SQL',link:'back-end/sql' },
   { text: "Docker", link: "back-end/docker" },
   { text: "消息队列", link: "back-end/mq" },
-  {text:"node+puppeteer并发打印服务",link:'back-end/project-puppeteer'}
+  { text: "IoT 与 MQTT", link: "back-end/IOT" },
+  { text: "Puppeteer并发打印服务", link: "back-end/project-puppeteer" },
 ];
 const mobileConfig = [
   { text: "web-适配", link: "mobile/rem.md" },
@@ -114,17 +116,17 @@ const AiConfig = [
     link: "ai/interview",
   },
   {
-    text:'RAG',
-    link:'ai/rag',
+    text: "RAG",
+    link: "ai/rag",
   },
   {
-    text:'Agent',
-    link:'ai/agent',
+    text: "Agent",
+    link: "ai/agent",
   },
   {
-    text:'Agent记忆管理',
-    link:'ai/agent-memory',
-  }
+    text: "Agent记忆管理",
+    link: "ai/agent-memory",
+  },
 ];
 export default withMermaid(
   defineConfig({
@@ -142,8 +144,12 @@ export default withMermaid(
         provider: "local",
       },
       nav: [
-        {text:'AI',link:'ai/interview'},
+        { text: "AI", link: "ai/interview" },
         { text: "作品集", link: "/project/" },
+        {
+          text: "后端",
+          items: backEndConfig,
+        },
         {
           text: "前端基础",
           items: [
@@ -172,10 +178,6 @@ export default withMermaid(
           items: leetdCode,
         },
         {
-          text: "后端",
-          items: backEndConfig,
-        },
-        {
           text: "跨端",
           items: [...mobileConfig],
         },
@@ -184,6 +186,10 @@ export default withMermaid(
         {
           text: "AI",
           items: AiConfig,
+        },
+        {
+          text: "后端",
+          items: backEndConfig,
         },
         {
           text: "前端工程化",
@@ -196,10 +202,6 @@ export default withMermaid(
         {
           text: "算法",
           items: leetdCode,
-        },
-        {
-          text: "后端",
-          items: backEndConfig,
         },
         {
           text: "跨端",
