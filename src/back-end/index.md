@@ -1,7 +1,33 @@
 # 后端
 
 后端部分以 node、nest 为主
+## 架构图
+```mermaid
+flowchart TB
+    App["应用代码<br/>NestJS / Express / JavaScript"]
 
+    subgraph Node["Node.js 运行时"]
+        V8["V8 引擎<br/>执行 JavaScript、管理内存"]
+        API["Node.js API<br/>fs / http / net / crypto"]
+
+        subgraph UV["libuv"]
+            Loop["事件循环<br/>监听事件、驱动回调"]
+            Pool["工作线程池<br/>异步文件操作、部分加密等"]
+        end
+
+        V8 -->|"调用"| API
+        API -->|"注册异步 I/O"| Loop
+        API -->|"提交原生任务"| Pool
+        Pool -->|"任务完成通知"| Loop
+        Loop -->|"回调交给 V8 执行"| V8
+    end
+
+    OS["操作系统<br/>网络 I/O、文件系统"]
+
+    App --> V8
+    Loop <-->|"网络事件通知"| OS
+    Pool <-->|"文件等系统操作"| OS
+```
 ## Node 是什么？优缺点？应用场景？
 
 `Node.js`是一个开源`JavaScript`运行环境。在浏览器外，利用事件驱动，非阻塞和异步输入输出模型来提升性能。
@@ -24,6 +50,59 @@
 
 - 善于 I/O。不善于计算。因为 Nodejs 是单线程，如果计算（同步）太多。则会阻塞线程
 - 大量并发 I/O。应用程序内部程序并不需要进行非常复杂的处理。
+
+## libuv
+libuv 是一个**跨平台的 C 语言库**，Node.js 的底层事件驱动核心，用在 Node、Luvit、Rust tokio 部分场景等。
+核心两大组件：
+1. **IO 多路复用（epoll/linux、kqueue/mac、IOCP/windows）**：处理**网络 I/O（TCP/UDP/http）**，内核事件通知，**不占用线程**
+2. **线程池（thread pool）**：模拟异步文件 I/O、dns.lookup 这类**操作系统没有原生异步支持的阻塞系统调用**
+> 核心设计：JS主线程单线程跑事件循环；耗时阻塞型系统调用丢到线程池；网络I/0交给操作系统内核监听
+> 注意：libuv 本身**不是事件循环**，事件循环是 libuv 提供的 API。Node.js 的事件循环就是调用 libuv 的 uv_run。
+```mermaid
+flowchart TB
+    JS["Node.js JS主线程<br/>执行JS、事件循环调度"]
+    subgraph libuv["libuv库"]
+        EL["Event Loop 事件循环<br/>6个阶段：Timers/Poll/Check..."]
+        IO["IO多路复用<br/>epoll/kqueue/IOCP<br/>TCP、UDP、Socket、HTTP网络事件"]
+        TP["libuv ThreadPool 默认4线程<br/>✅异步fs文件读写<br/>✅dns.lookup<br/>✅zlib/crypto部分任务"]
+    end
+    OS["操作系统内核"]
+
+    %% 方向
+    JS -->|调用 uv_run 启动| EL
+    EL <-->|监听网络事件| IO
+    IO <--> OS
+
+    EL -->|把阻塞系统任务下发| TP
+    TP -->|调用阻塞系统调用| OS
+    TP -->|任务完成，回调入队列| EL
+
+    EL -->|回调就绪，交给主线程执行回调JS| JS
+```
+数据完整例子 `fs.readFile`
+
+1.JS调用fs.readFile -> 进入 libuv
+2.libuv将读文件任务投递到线程池里一个工作线程
+3.工作线程调用操作系统阻塞read() 等待磁盘读取完成
+4.磁盘读取完成后，线程池把回调压入事件循环Poll队列
+5.事件循环运行到Poll阶段，取出回调，交给js主线程执行回调函数
+
+数据流例子： `TCP http请求`(网络I/O)
+
+1.Node http server调用libuv，注册socket监听，交给epoll（IO多路复用）
+2.操作系统内核监听端口，无线程阻塞等待连接
+3.客户端发HTTP请求数据包到内核
+4.epoll收到内核事件通知，将request回调放到Poll队列
+5.事件循环Poll阶段，主线程执行http request回调JS
+
+### libuv能力清单
+- 事件循环
+- IO多路复用（网络socket TCP/UDP）
+- 线程池（文件 I/O dns.lookup）
+- 定时器 （setTimeout底层uv_timer_t）
+- 信号处理（SIGINT等系统信号）
+- 进程、管道（child_process底层uv_spawn）
+- 异步队列、跨线程消息通信
 
 ## Node 的核心特性
 
@@ -59,6 +138,132 @@
 场景：
 
 - HTTP 服务器（监听 request 事件处理请求）、TCP 服务（监听 connection 事件建立连接）。
+
+#### 宏任务
+|阶段|API|
+|---|---|
+|Timer|setTimeout/setInterval|
+|Poll|fs、TCP、HTTP普通I/O回调|
+|Check|setImmediate|
+|Close|socket close事件|
+|Pending|系统TCP错误回调|
+
+#### Poll阶段的一些api
+TCP底层net模块
+```js
+const net = require('net')
+const server = net.createServer(socket=>{
+  console.log('tcp connection callback[Poll]')
+  socket.on('data', (chunk) => {
+    // socket收到数据回调，Poll阶段
+    console.log('tcp data event(Poll)');
+  });
+})
+server.listen(8080);
+```
+HTTP（基于TCP net）
+```js
+const http = require('http');
+const server = http.createServer((req, res) => {
+  // 收到http请求，request回调，Poll阶段执行！
+  console.log('http request callback(Poll)');
+  res.end('ok');
+});
+server.listen(3000);
+
+// http客户端
+http.get('http://baidu.com', (res) => {
+  // http响应回调，Poll
+  console.log('http client response(Poll)');
+});
+```
+UDP dgram(数据包socket)
+```js
+const ddgram = require('dgram')
+const socket = dgram.createSocket('udp4')
+socket.on('message',(msg)=>{
+  console.log('udp message callback(Poll)')
+})
+```
+Stream流（底层依托I/O, data/end事件）
+```js
+onst fs = require('fs');
+const rs = fs.createReadStream(__filename);
+rs.on('data', chunk => {
+  console.log('stream data(Poll)');
+})
+rs.on('end', () => {
+  console.log('stream end(Poll)');
+})
+```
+
+#### 微任务
+微任务有两个队列，优先级：
+`process.nextTick队列` > `Promise.then/catch、queueMicrotask()队列` 执行时机：当事件循环某一个阶段，把该阶段队列里面所有回调全部执行完毕完毕之后，立刻暂停事件循环，优先把所有微任务全部清空，再进入下一个事件循环阶段
+
+执行顺序：
+1.先跑完当前阶段全部宏任务回调
+2.循环清空所有`process.nextTick()`(nextTick里面又产生nextTick也会继续执行，直到队列空)
+3.再清空Promise.thn/`queueMicrotask()`全部微任务
+4.微任务全部清理完毕，才进入事件循环下一个阶段。
+> node是按阶段，执行宏在清微
+
+```js
+setTimeout(()=>{
+    console.log('timer1')
+    Promise.resolve().then(()=>console.log('promise1'))
+},0)
+
+setTimeout(()=>{
+    console.log('timer2')
+    Promise.resolve().then(()=>console.log('promise2'))
+},0)
+/*
+timer1
+timer2
+promise1
+promise2
+*/
+```
+
+```js
+Promise.resolve().then(()=>console.log('promise'))
+process.nextTick(()=>console.log('nextTick'))
+/*
+nextTick
+promise
+*/
+```
+setImmediate vs setTimeout (fn, 0) 经典迷惑
+```js
+setTimeout(()=>console.log('setTimeout'),0)
+setImmediate(()=>console.log('setImmediate'))
+/* node初始化快，则 setTimeout，setImemediate ，否则反之*/
+```
+#### 完整流程图文版
+```
+启动Node，执行同步JS代码（主线程）
+↓
+进入事件循环：
+Timers阶段 → 执行所有到期setTimeout/setInterval回调
+└──【阶段结束】清空nextTick队列 → 清空Promise微任务队列
+↓
+Pending callbacks阶段
+└──【阶段结束】清空nextTick → Promise微任务
+↓
+Idle/Prepare（内部）
+↓
+Poll阶段：执行I/O回调，没有就阻塞等待I/O
+└──【阶段结束】清空nextTick → Promise微任务
+↓
+Check阶段：执行setImmediate回调
+└──【阶段结束】清空nextTick → Promise微任务
+↓
+Close callbacks阶段：执行close事件回调
+└──【阶段结束】清空nextTick → Promise微任务
+↓
+一轮循环结束，回到Timers，开启新一轮
+```
 
 ### 核心特性三：单线程模型（+ 多核补充方案）
 
@@ -143,6 +348,12 @@ Node.js 解决了 JS 无原生模块的问题，支持两种主流模块化规�
 ### 总结
 
 stream 是流式数据处理的基石。通过分块和管道的机制，完美解决了处理大数据集和持续数据流的内存效率和时间效率。
+
+## stream和buffer
+> Buffer 是“装数据的容器”，Stream 是“让数据分批流动和处理的机制”。Buffer 用于表示和操作二进制字节；Stream 用于分块读取、写入和转换数据 。普通二进制流通常以 Buffer 作为数据块，配合背压控制数据流速，避免生产速度超过消费速度导致内存不断增长。
+> 1. Stream 不会把整个文件自动变成一个大 Buffer
+> 2. Stream 中的数据不一定是 Buffer
+> 3. 一块 Buffer 不一定是一条完整业务消息
 
 ## Node 的 process 的理解？应用场景
 
@@ -629,4 +840,8 @@ app.listen(3000, () => {});
 - 分析瓶颈： 定期进行压力测试（如使用 autocannon、wrk 工具），找出系统的性能拐点。
 
 ## 概念
-ansible、splunk、api安全模式（OAuth2/JWT、RBAC） 密钥管理、审计日志、容错模式、支付（Omise、Stripe、Paypal）、elysiajs、h3js、bun.js、deno.js 
+ansible、splunk、api安全模式（OAuth2/JWT、RBAC） 密钥管理、审计日志、容错模式、支付（Omise、Stripe、Paypal）、elysiajs、h3js、bun.js、deno.js
+
+## IoT 与 MQTT
+
+设备通信、MQTT 和空调控制示例已整理到 [IoT 与 MQTT](./IOT.md)。
