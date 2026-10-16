@@ -76,6 +76,7 @@ const leetdCode = [
 const backEndConfig = [
   { text: "NodeJS", link: "back-end/index" },
   { text: "Redis", link: "back-end/redis" },
+  {text:'Express',link:'back-end/express'},
   { text: "Nest文件上传", link: "back-end/nest_upload" },
   { text: "Nest", link: "back-end/nest" },
   { text: "Nest 微服务", link: "back-end/nest-micro" },

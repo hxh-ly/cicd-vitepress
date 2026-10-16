@@ -1,6 +1,8 @@
 # 后端
 
 后端部分以 node、nest 为主
+
+中间件源码阅读：[Express 的 next() 与洋葱模型](./express.md)。
 ## 架构图
 ```mermaid
 flowchart TB
