@@ -88,6 +88,7 @@ const backEndConfig = [
   { text: "SQL 锁机制", link: "back-end/sql-lock" },
   { text: "SQL 主从复制", link: "back-end/sql-master-slave" },
   { text: "Docker", link: "back-end/docker" },
+  { text: "deploy", link: "back-end/deploy" },
   { text: "消息队列", link: "back-end/mq" },
   { text: "IoT 与 MQTT", link: "back-end/IOT" },
   { text: "Puppeteer并发打印服务", link: "back-end/project-puppeteer" },
