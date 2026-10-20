@@ -243,9 +243,9 @@ export class User {
 ## 切面 (用来处理通用逻辑的利器)
 
 Nest 提供了 AOP （Aspect Oriented Programming 面向切面编程）的机制
-![alt text](image.png)
+![alt text](img/image.png)
 具体来说，有 Middleware、Guard、Interceptor、Pipe、Exception Filter 这五种。
-![alt text](image-1.png)
+![alt text](img/image-1.png)
 
 - 中间件：用来处理请求和响应对象，或者调用下一个中间件函数
 - 守卫：用于权限控制 （能不能进这个接口）
