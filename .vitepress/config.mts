@@ -75,6 +75,7 @@ const leetdCode = [
 ];
 const backEndConfig = [
   { text:'体系架构',link:'back-end/system-architecture' },
+  {text:'Linux',link:'back-end/linux' },
   { text: "NodeJS", link: "back-end/index" },
   { text: "Redis", link: "back-end/redis" },
   {text:'Express',link:'back-end/express'},
