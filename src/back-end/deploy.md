@@ -34,9 +34,9 @@ workflow（整个文件）
   run:pnpm run build       # ② 直接在 Runner 上执行 shell 命令
 ```
 
-4.表达式于上下文`${{}}`
+<span v-pre>4.表达式于上下文`${{}}`</span>
 
-`${{}}`里可以引用：`secrets.XXX`（加密密钥）、`var.XXX`（非加密变量）、`env.XXX`、`github.sha`、`github.ref_name`、`steps.<step_id>.outputs.<key>`（上一步的key）等。这就是这份文件里大量`${{sercets.XXX}} ${{github.sha}} ${{steps.acr.outputs.registry}}`等来源
+<span v-pre>`${{}}`里可以引用：`secrets.XXX`（加密密钥）、`var.XXX`（非加密变量）、`env.XXX`、`github.sha`、`github.ref_name`、`steps.<step_id>.outputs.<key>`（上一步的key）等。这就是这份文件里大量`${{sercets.XXX}} ${{github.sha}} ${{steps.acr.outputs.registry}}`等来源</span>
 
 ### Secret / Variable 的区别（关键）
 
@@ -44,7 +44,7 @@ workflow（整个文件）
 - Repository Variables：非敏感配置（如这份文件里的 `ANALYTICS_EXECUTION_MODE`），用于 `vars.XXX`，可随时改，实现 "不改代码灰度切换"。
 
 6.步骤传递数据:`GITHUB_OUTPUT`
-一个step用`echo "key=value" >> $GITHUB_OUTPUT`输出结果，下一步step用`${{steps.xxid.outputs.key}}`读取。多行值用heredoc：
+<span v-pre>一个step用`echo "key=value" >> $GITHUB_OUTPUT`输出结果，下一步step用`${{steps.xxid.outputs.key}}`读取。多行值用heredoc：</span>
 ```bash
 echo "tags<<EOF" >> "$GITHUB_OUTPUT"
 echo "img:tag1"
