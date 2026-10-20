@@ -74,6 +74,7 @@ const leetdCode = [
   { text: "二分查找", link: "leetcode/search/index" },
 ];
 const backEndConfig = [
+  { text:'体系架构',link:'back-end/system-architecture' },
   { text: "NodeJS", link: "back-end/index" },
   { text: "Redis", link: "back-end/redis" },
   {text:'Express',link:'back-end/express'},
