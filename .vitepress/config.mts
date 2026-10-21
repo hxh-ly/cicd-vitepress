@@ -92,7 +92,9 @@ const backEndConfig = [
   { text: "消息队列", link: "back-end/mq" },
   { text: "IoT 与 MQTT", link: "back-end/IOT" },
   { text: "Puppeteer并发打印服务", link: "back-end/project-puppeteer" },
+  {text:'分布式事务',link:'back-end/distributed-transaction'},
 ];
+
 const mobileConfig = [
   { text: "web-适配", link: "mobile/rem.md" },
   { text: "小程序", link: "mobile/mini-app.md" },
