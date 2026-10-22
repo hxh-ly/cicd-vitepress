@@ -1,1145 +1,573 @@
-# 基于Node.js+Puppeteer高并发批量PDF打印服务
+# PDF Render Service：可观测的批量 PDF 渲染服务
 
-本文前半部分展示手写进程池，末尾的「引入 BullMQ 的改造示例」展示 Redis 队列与独立 Worker 的替代实现。两套代码分别使用，不要同时启动两套任务调度器。
-## 完整架构
-```
-客户端
-   │
-   ▼
-Nginx 网关
-   │
-   ├─ 限制请求速率
-   ├─ 限制请求体大小
-   ├─ 处理 HTTPS
-   ├─ 反向代理
-   └─ 超时配置
-   │
-   ▼
-Node.js API 主进程
-   │
-   ├─ 参数校验
-   ├─ 创建批量任务
-   ├─ 写入 BullMQ
-   ├─ 查询任务状态
-   └─ 返回 jobId
-   │
-   ▼
-Redis
-   │
-   └─ BullMQ 队列
-        │
-        ▼
-PDF Worker Consumer
-   │
-   ├─ BullMQ 并发控制
-   ├─ child_process 子进程池
-   ├─ Puppeteer
-   └─ Chromium
-        │
-        ▼
-对象存储 / 本地文件
-   │
-   ▼
-任务结果和下载地址
-```
+基于 NestJS、BullMQ、PostgreSQL 和 Puppeteer/Chromium 实现的批量 PDF 渲染服务。项目重点解决复杂 HTML 试卷在 Linux 环境下的并发调度、进程隔离、资源就绪判断、硬超时回收、失败重试和容量评估问题。
 
-## 整体架构
-```
-HTTP/API 主进程
-│
-├─ 接收批量打印请求
-├─ 拆分任务
-├─ 放入任务队列
-├─ 控制最大并发数
-├─ 分配任务给空闲子进程
-├─ 处理超时和异常
-└─ 汇总打印结果
-     │
-     ├─ child_process 1
-     │    └─ Puppeteer + Chromium
-     │
-     ├─ child_process 2
-     │    └─ Puppeteer + Chromium
-     │
-     └─ child_process 3
-          └─ Puppeteer + Chromium
-```
+- 项目地址：[github.com/hxh-ly/pdf-render-service](https://github.com/hxh-ly/pdf-render-service)
 
-核心原则：
-1. 主进程不能执行 Chromium 渲染。
-2. 子进程数量由 maxWorkers 控制。
-3. 一个子进程同一时间只处理一个打印任务。
-4. 子进程内部负责 Puppeteer 生命周期。
-5. 子进程异常时，主进程可以销毁并重新拉起。
-6. 任务超时必须杀掉对应子进程，不能只结束 Promise。
+> 本项目提供完整的 Docker Compose 运行环境、真实长试卷 heavy 模板、并发压测脚本、故障注入，以及 JSON、CSV、Markdown 三种测试报告。
 
-主进程：创建子进程池
-```js
-// pool.js
-const path = require('node:path')
-const {fork} = require('node:child_process')
-const {randomUUID} = require('node:crypto');
+## 项目成果
 
-class PdfWorkPool {
-    construtor(options = {}) {
-        this.workerFile = path.resolve(__direname,'pdf-worker.js')
-        this.maxWorkers = options.maxWorkers ?? 4;
-        this.taskTimeout = options.taskTimeout ?? 60_000;
-        this.queue = [];
-        this.workers = new Map();
-        this.taskMap = new Map();
+在 4C8G 容器配额下，使用 61 页、约 5.66MB 的数学试卷 PDF 作为重型负载，对并发 1～4 进行阶梯压测：
 
-        for(let i = 0;i<this.maxWorkers;i++) {
-            this.createWorker();
-        }
-    }
+- 并发 3 获得最高有效吞吐，20 任务吞吐为 25.65 jobs/min；
+- 并发 4 出现明显 CPU throttling，吞吐反而下降至 22.90 jobs/min，p95 上升至 10.62 秒；
+- 最终选定 `WORKER_CONCURRENCY=3`；
+- 并发 3 下持续执行 60 个 heavy 任务，60/60 成功；
+- 持续测试吞吐 28.97 jobs/min，p95 6.44 秒，无 OOM、OOM kill 和 `memory.max` 事件；
+- 按 70% 目标利用率，形成约 20 jobs/min、约 1200 jobs/hour 的容量基线。
 
-    createWorker() {
-        const workerId = randomUUID();
-        const child = fork(this.workFile,[],{
-            stdio:['ignore','pipe','pipe','ipc'],
-            env: {
-                ...process.env,
-                WORKER_ID:workerId
-            }
-        })
+该容量基线来自本地 Docker cgroup 配额测试。正式生产部署前，仍应在相同规格 Linux 机器上进行 30～60 分钟持续复测。
 
-        const worker = {
-      id: workerId,
-      child,
-      busy: false,
-      taskId: null,
-      completedCount: 0,
-    intentionalExit: false,
-    };
+## 背景与目标
 
-    this.workers.set(workerId, worker);
+传统 `wkhtmltopdf` 或直接在主进程中启动浏览器的实现，常见问题包括：
 
-    child.stdout?.on('data', (data) => {
-      console.log(`[pdf-worker:${workerId}] ${data.toString().trim()}`);
-    });
+- 高峰期无限创建 Chromium，导致整机 OOM；
+- 单个页面卡死后长期占用 Worker 和浏览器进程；
+- 固定延时无法准确判断字体、图片和数学公式是否已经完成渲染；
+- 批量任务缺少统一状态、失败分类和结果汇总；
+- 只看应用日志，无法区分 V8 OOM、容器 OOM、Chromium 崩溃和 CPU throttling；
+- 无法根据机器规格回答“应该配置多少并发”。
 
-    child.stderr?.on('data', (data) => {
-      console.error(`[pdf-worker:${workerId}] ${data.toString().trim()}`);
-    });
-
-    child.on('message', (message) => {
-      this.handleWorkerMessage(worker, message);
-    });
-
-    child.on('error', (error) => {
-      console.error(`[pdf-worker:${workerId}] process error`, error);
-    });
-
-    child.on('exit', (code, signal) => {
-      this.handleWorkerExit(worker, code, signal);
-    });
-
-    return worker;
-    }
-
-      enqueue(payload) {
-    return new Promise((resolve, reject) => {
-      const task = {
-        id: randomUUID(),
-        payload,
-        resolve,
-        reject,
-        timer: null,
-        workerId: null,
-      };
-
-      this.queue.push(task);
-      this.dispatch();
-    });
-  }
-
-  dispatch() {
-    for (const worker of this.workers.values()) {
-      if (worker.busy) {
-        continue;
-      }
-
-      const task = this.queue.shift();
-
-      if (!task) {
-        break;
-      }
-
-      this.runTask(worker, task);
-    }
-  }
-
-  runTask(worker, task) {
-    worker.busy = true;
-    worker.taskId = task.id;
-
-    task.workerId = worker.id;
-    this.taskMap.set(task.id, task);
-
-    task.timer = setTimeout(() => {
-      this.handleTaskTimeout(worker, task);
-    }, this.taskTimeout);
-
-    worker.child.send({
-      type: 'render',
-      taskId: task.id,
-      payload: task.payload,
-    });
-  }
-
-  handleWorkerMessage(worker, message) {
-    if (!message || !message.type) {
-      return;
-    }
-
-    if (message.type === 'ready') {
-      worker.busy = false;
-      worker.taskId = null;
-      this.dispatch();
-      return;
-    }
-
-    if (message.type === 'result') {
-      const task = this.taskMap.get(message.taskId);
-
-      if (!task) {
-        return;
-      }
-
-      clearTimeout(task.timer);
-      this.taskMap.delete(message.taskId);
-
-      worker.busy = false;
-      worker.taskId = null;
-
-      worker.completedCount += 1;
-
-      if (message.ok) {
-        task.resolve(message.data);
-      } else {
-        task.reject(new Error(message.error));
-      }
-
-    /*
-     * 当前任务已经完成，再决定是否回收 Worker。
-     * 不能在任务尚未结束时直接退出，否则会中断当前 PDF 生成。
-     */
-    if (worker.completedCount >= MAX_TASKS_PER_WORKER) {
-      this.recycleWorker(worker);
-      return;
-    }
-
-      this.dispatch();
-    }
-  }
-
-  recycleWorker(worker) {
-  if (worker.intentionalExit) {
-    return;
-  }
-
-  worker.intentionalExit = true;
-  worker.recycling = true;
-
-  console.log(
-    `[pdf-pool] recycle worker=${worker.id}, ` +
-    `completed=${worker.completedCount}`,
-  );
-
-  /*
-   * 当前任务已经结束，可以让子进程优雅退出。
-   */
-  worker.child.send({
-    type: 'shutdown',
-  });
-
-  /*
-   * 如果子进程迟迟不退出，强制终止。
-   */
-  worker.recycleTimer = setTimeout(() => {
-    if (!worker.child.killed) {
-      worker.child.kill('SIGKILL');
-    }
-  }, 5_000);
-}
-
-  handleTaskTimeout(worker, task) {
-    if (!this.taskMap.has(task.id)) {
-      return;
-    }
-
-    clearTimeout(task.timer);
-    this.taskMap.delete(task.id);
-
-    task.reject(new Error(`PDF render timeout: ${task.id}`));
-
-    /*
-     * 不能只把 worker.busy 改成 false。
-     * 因为底层 Chromium 可能仍然没有退出。
-     * 这里直接终止子进程，确保 Chromium 一起被回收。
-     */
-    this.killWorker(worker, 'task timeout');
-
-    // 拉起新的子进程补充池容量
-    this.createWorker();
-    this.dispatch();
-  }
-
-  handleWorkerExit(worker, code, signal) {
-    this.workers.delete(worker.id);
-
-    if (worker.taskId) {
-      const task = this.taskMap.get(worker.taskId);
-
-      if (task) {
-        clearTimeout(task.timer);
-        this.taskMap.delete(worker.taskId);
-        task.reject(
-          new Error(
-            `PDF worker exited unexpectedly: code=${code}, signal=${signal}`,
-          ),
-        );
-      }
-    }
-
-     /*
-     * 非主动退出时补充一个新的 Worker。
-     * 生产环境中可以增加重启次数限制和退避策略。
-     */
-    if (!worker.intentionalExit) {
-      this.createWorker();
-      this.dispatch();
-    }
-  }
-
-  killWorker(worker, reason) {
-    worker.intentionalExit = true;
-
-    console.warn(`[pdf-pool] kill worker=${worker.id}, reason=${reason}`);
-
-    if (!worker.child.killed) {
-      worker.child.kill('SIGTERM');
-    }
-
-    setTimeout(() => {
-      if (!worker.child.killed) {
-        worker.child.kill('SIGKILL');
-      }
-    }, 3_000);
-  }
-
-    async close() {
-    for (const worker of this.workers.values()) {
-      worker.intentionalExit = true;
-      worker.child.send({ type: 'shutdown' });
-
-      setTimeout(() => {
-        if (!worker.child.killed) {
-          worker.child.kill('SIGTERM');
-        }
-      }, 3_000);
-    }
-  }
-}
-
-module.exports = {
-  PdfWorkerPool,
-};
-```
-
-子进程：执行Puppeteer渲染
-pdf-worker.js
-```js
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const puppeteer = require('puppeteer');
-
-const PRINT_TEMPLATE_URL =
-  process.env.PRINT_TEMPLATE_URL ??
-  'http://127.0.0.1:3000/print/exam';
-
-const OUTPUT_DIR =
-  process.env.PDF_OUTPUT_DIR ??
-  path.resolve(process.cwd(), 'output');
-
-let browser = null;
-
-async function init() {
-  browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-    ],
-  });
-
-  process.send?.({
-    type: 'ready',
-    workerId: process.env.WORKER_ID,
-  });
-}
-
-/**
- * 根据业务参数拼接固定打印模板 URL。
- *
- * payload 示例：
- * {
- *   examPageId: '10001',
- *   type: 3,
- *   userId: 'user-001',
- *   tenantId: 'tenant-001'
- * }
- */
-function buildPrintUrl(payload) {
-  if (!payload || !payload.examPageId) {
-    throw new Error('examPageId is required');
-  }
-
-  if (payload.type === undefined || payload.type === null) {
-    throw new Error('type is required');
-  }
-
-  const url = new URL(PRINT_TEMPLATE_URL);
-
-  url.searchParams.set(
-    'examPageId',
-    String(payload.examPageId),
-  );
-
-  url.searchParams.set(
-    'type',
-    String(payload.type),
-  );
-
-  /*
-   * 以下参数按照你的真实业务需要保留。
-   * 不需要的参数不要拼到 URL 中。
-   */
-  if (payload.userId) {
-    url.searchParams.set('userId', String(payload.userId));
-  }
-
-  if (payload.tenantId) {
-    url.searchParams.set('tenantId', String(payload.tenantId));
-  }
-
-  if (payload.scene) {
-    url.searchParams.set('scene', String(payload.scene));
-  }
-
-  return url.toString();
-}
-
-async function waitForPrintReady(page, timeout = 30_000) {
-  /*
-   * 固定 HTML 模板在数据和公式都完成后设置：
-   *
-   * window.__PDF_RENDER_READY__ = true
-   */
-  await page.waitForFunction(
-    () => window.__PDF_RENDER_READY__ === true,
-    {
-      timeout,
-    },
-  );
-}
-
-async function renderPdf(payload) {
-  const page = await browser.newPage();
-
-  const printUrl = buildPrintUrl(payload);
-
-  const outputFileName =
-    payload.outputFileName ??
-    `exam-${payload.examPageId}-${payload.type}-${Date.now()}.pdf`;
-
-  const outputPath = path.resolve(
-    OUTPUT_DIR,
-    outputFileName,
-  );
-
-  try {
-    await page.setViewport({
-      width: payload.width ?? 1440,
-      height: payload.height ?? 900,
-      deviceScaleFactor: 1,
-    });
-
-    /*
-     * 如果页面需要登录态，可以在这里设置 Cookie 或请求头。
-     */
-    if (payload.cookies?.length) {
-      await page.setCookie(...payload.cookies);
-    }
-
-    if (payload.authorization) {
-      await page.setExtraHTTPHeaders({
-        Authorization: payload.authorization,
-      });
-    }
-
-    /*
-     * 访问固定打印模板，只通过 query 参数区分业务场景。
-     */
-    await page.goto(printUrl, {
-      waitUntil: 'domcontentloaded',
-      timeout: payload.navigationTimeout ?? 20_000,
-    });
-
-    /*
-     * 等待固定 HTML 页面：
-     * 1. 根据 examPageId 请求试卷数据；
-     * 2. 根据 type 判断打印场景；
-     * 3. 完成公式、图片、字体、Canvas 等渲染；
-     * 4. 设置 window.__PDF_RENDER_READY__。
-     */
-    await waitForPrintReady(
-      page,
-      payload.renderTimeout ?? 30_000,
-    );
-
-    await fs.mkdir(OUTPUT_DIR, {
-      recursive: true,
-    });
-
-    await page.pdf({
-      path: outputPath,
-      format: payload.format ?? 'A4',
-      printBackground: true,
-      preferCSSPageSize: true,
-      margin: payload.margin ?? {
-        top: '10mm',
-        right: '10mm',
-        bottom: '10mm',
-        left: '10mm',
-      },
-    });
-
-    return {
-      taskId: payload.taskId,
-      examPageId: payload.examPageId,
-      type: payload.type,
-      printUrl,
-      outputPath,
-      status: 'success',
-    };
-  } finally {
-    /*
-     * 每个任务独立创建 Page。
-     * 无论成功还是失败，都必须释放页面资源。
-     */
-    await page.close().catch(() => {});
-  }
-}
-
-process.on('message', async (message) => {
-  if (!message || !message.type) {
-    return;
-  }
-
-  if (message.type === 'render') {
-    const { taskId, payload } = message;
-
-    try {
-      const result = await renderPdf({
-        ...payload,
-        taskId,
-      });
-
-      process.send?.({
-        type: 'result',
-        taskId,
-        ok: true,
-        data: result,
-      });
-    } catch (error) {
-      process.send?.({
-        type: 'result',
-        taskId,
-        ok: false,
-        error: error instanceof Error
-          ? error.message
-          : String(error),
-      });
-    }
-
-    return;
-  }
-
-  if (message.type === 'shutdown') {
-    await shutdown();
-  }
-});
-
-async function shutdown() {
-  try {
-    await browser?.close();
-  } catch (error) {
-    console.error('close browser failed', error);
-  } finally {
-    process.exit(0);
-  }
-}
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-
-init().catch((error) => {
-  console.error('worker init failed', error);
-  process.exit(1);
-});
-```
-
-
-调用方式
-server.js
-```js
-app.post('/pdf/batch', async (req, res) => {
-  const tasks = req.body.tasks ?? [];
-
-  if (!Array.isArray(tasks) || tasks.length === 0) {
-    return res.status(400).json({
-      message: 'tasks must be a non-empty array',
-    });
-  }
-
-  try {
-    const results = await Promise.allSettled(
-      tasks.map((task) =>
-        pool.enqueue({
-          url: task.url,
-          outputDir: './output',
-          format: task.format ?? 'A4',
-        }),
-      ),
-    );
-
-    const success = [];
-    const failed = [];
-
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        success.push(result.value);
-      } else {
-        failed.push({
-          error: result.reason.message,
-        });
-      }
-    }
-
-    return res.json({
-      total: tasks.length,
-      successCount: success.length,
-      failedCount: failed.length,
-      success,
-      failed,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: error.message,
-    });
-  }
-});
-
-process.on('SIGTERM', async () => {
-  await pool.close();
-  process.exit(0);
-});
-
-app.listen(3000, () => {
-  console.log('PDF service listening on port 3000');
-});
-
-```
-
-## 完整例子
-
-批量打印 20 份试卷，最大并发数为 4：
-```
-HTTP 请求到达
-  -> 主进程将 20 个任务放入 queue
-  -> 分配任务 1、2、3、4
-  -> 4 个子进程分别访问固定 HTML 模板
-  -> 子进程通过 examPageId、type 加载不同试卷场景
-  -> 完成后发送 result
-  -> 主进程将对应 Worker 标记为空闲
-  -> 每有一个子进程空闲，立即给它分配队头任务，不等待整批完成
-  -> 直到 20 个任务全部完成
-  -> 主进程汇总成功和失败结果
-  -> 4 个子进程继续等待
-```
-
-如果 Worker 2 在任务 6 时崩溃：
-```
-Worker 2 崩溃
-  -> 主进程收到 exit
-  -> 任务 6 标记失败
-  -> 销毁 Worker 2 的记录
-  -> 创建新的 Worker 5
-  -> Worker 5 初始化完成并发送 ready
-  -> Worker 5 接收队列中的下一个任务
-```
-
-当一个Woker处理满100个任务,这样可以避免 Chromium 长时间运行后出现内存缓慢增长。
-```
-完成第 100 个任务
-  -> 关闭 Browser
-  -> 退出子进程
-  -> 主进程创建新的子进程
-```
-
-## 根据机器配置决定预热多少子进程
-主要资源消耗是 Chromium，重点关注：
-- 可用内存；
-- 单个打印任务的峰值内存；
-- CPU 核数；
-- 页面复杂度；
-- 图片、公式、Canvas 和 WebAssembly 数量；
-- 业务允许的打印耗时。
-```
-最大并发数
-≈ 可用于打印的内存 × 安全系数 / 单任务峰值内存
-
-
-机器内存：8 GB
-系统和主服务占用：2 GB
-可分给打印服务：6 GB
-安全系数：0.6
-单个 Chromium 任务峰值：500 MB
-
-最大并发数 ≈ 6 × 0.6 / 0.5 ≈ 7
-```
-
-实际可能不会直接设置 7，而是从 4 开始压测，观察：
-- 成功率
-- 平均耗时
-- p95/p99耗时
-- 峰值内存
-- cpu使用率
-- 超时数量
-- chromium奔溃数量
-
-## CentOS监控
-```shell
-top
-
-##
-%Cpu(s)  CPU 使用率
-MiB Mem  内存使用情况
-load average  系统负载
-
-# top -p <node_pid>
-```
-
-## 合理配置Docker
-
-2c4g的配置
-```yml
-services:
-  pdf-service:
-    build: .
-    environment:
-      PDF_MIN_WORKERS: 1
-      PDF_MAX_WORKERS: 2
-      PDF_TASK_TIMEOUT: 60000
-    mem_limit: 2g # 最大使用2g内存
-    cpus: 1.5 # 这个容器最多使用约1.5个CPU核心的计算能力
-    pids_limit: 120 # 最多允许创建120个进程和线程
-    shm_size: "512m" # 共享内存的大小
-    restart: unless-stopped
-```
-
-最多运行 2 个打印子进程
-容器最多使用 2GB 内存
-容器最多使用约 1.5 个 CPU 核心
-容器最多创建 120 个进程/线程
-Chromium 可使用 512MB /dev/shm
-
-## Nginx
-限制请求速率
-```nginx
-http {
-    limit_req_zone $binary_remote_addr zon=pdf_limit:10m rate=2r/s;
-
-    server {
-        listen 80;
-
-        location /api/pdf {
-            limit_req zone=pdf_limit burst=5 nodelay; # 额外突发最多5个积压请求 ；突发请求不等待，直接转发，直到超过 burst 上限
-
-            proxy_pass http://api:3000;
-            proxy_connect_timeout 5s;
-            proxy_read_timeout 30s;
-            client_max_body_size 2m;
-        }
-    }
-}
-```
-
-## 引入 BullMQ 的改造示例
-
-### 有什么帮助
-
-手写进程池解决的是单机资源控制；BullMQ 解决排队、任务状态、重试和跨进程/跨机器消费。只在单机临时打印少量文件时，进程池已经够用；需要 API 重启后仍可查询任务、积压排队和横向扩容时，引入 BullMQ 更有价值。
-
-- `this.queue` 内存数组改为 Redis 中的 BullMQ 队列；可靠程度仍取决于 Redis 持久化、备份与高可用配置。
-- HTTP 不再等待 20 份 PDF 全部完成，而是入队成功后返回 `202 + batchId + jobIds`。
-- 每份 PDF 是一个 job，可以单独成功、失败和重试。
-- API 与打印进程独立部署，API 重启不会主动终止正在运行的独立 Worker。
-- Worker 异常退出后，失去锁的任务可经 stalled 检测重新排队；恢复不是即时的，也不是恰好执行一次。
-
-BullMQ 不会让 Chromium 单次渲染变快，也不会自动上传 PDF、实现业务幂等或清理所有孤儿浏览器进程。
-
-### 两种接入方式与任务分配
-
-**最小改造**可以保留已经修好的本地进程池，用 `new Worker('pdf-render', job => pool.enqueue(job.data), { connection, concurrency: 4 })` 接入。必须返回/等待 `enqueue()` 的 Promise，并把 BullMQ 并发与池容量协调好；否则任务先在 Redis 排一次队，又大量进入本地队列等待。上面的手写池仍需完善 ready 状态、回收和超时处理后才能用于生产。
-
-**下面选择更容易理解的替代方案：4 个独立 Node.js Worker 进程，每个 `concurrency: 1`。** 不再使用 `pool.js`、`busy`、`dispatch()` 或 `process.send({ type: 'result' })`。由进程管理器/容器负责启动和重启 Worker，BullMQ 负责领取与确认任务。
+本项目的目标不是单纯把 HTML 转成 PDF，而是建立完整的任务闭环：
 
 ```text
-HTTP POST /pdf/batch
-        ↓
-API → BullMQ Queue（Redis，20 个独立 job）
-        ↓ 多个 Worker 竞争领取，不是广播
-        ├─ Worker 进程 A：concurrency 1 → Puppeteer / Chromium
-        ├─ Worker 进程 B：concurrency 1 → Puppeteer / Chromium
-        ├─ Worker 进程 C：concurrency 1 → Puppeteer / Chromium
-        └─ Worker 进程 D：concurrency 1 → Puppeteer / Chromium
-        ↓
-文件写入存储，job 保存结果引用
-        ↑
-客户端通过 API 查询 job 状态和批次汇总
+可接收 → 可排队 → 可隔离 → 可超时 → 可回收 → 可重试
+       → 可追踪 → 可压测 → 可评估容量
 ```
 
-若 A/B/C/D 分别执行 1/2/3/4，C 最先完成且其他三个仍忙，C 就有机会领取等待中的任务 5。正常 FIFO、无优先级/延迟/重试插队时领取队头任务；多个消费者竞争时不保证由哪个进程拿到，也不保证完成顺序。任务 3 重试时可能由 A 执行。
+## 技术栈
 
-`concurrency` 是每个 Worker 实例的并发数，不会自动创建子进程。4 个进程 × 每个并发 1 = 最多 4 个正常执行的 job；若每个都改成 4，则总并发可能达到 16。浏览器自身还有多个操作系统子进程，不等于总共只存在 4 个 OS 进程。[BullMQ 并发说明](https://docs.bullmq.io/guide/workers/concurrency)
+- API：Node.js 22、NestJS 11、TypeScript
+- 队列：BullMQ 5、Redis 7
+- 状态存储：PostgreSQL 17、TypeORM
+- 渲染：Puppeteer Core、Chromium、KaTeX
+- 进程隔离：`child_process.fork()`、独立进程组、IPC
+- 部署：Docker、Docker Compose、cgroup v2
+- 测试与报告：Jest、自定义 Node.js 压测脚本
 
-### 示例准备
+## 总体架构
 
-以下是 **BullMQ 5、Express 5、Puppeteer 的独立本地示例**，将三个 `.cjs` 文件保存在同一个新目录中。安装命令在示例目录执行，无需向文档站点安装服务端依赖。
+```mermaid
+flowchart LR
+    Client["业务调用方 / 压测脚本"]
 
-```bash
-npm init -y
-npm install bullmq@5 express@5 puppeteer
-docker run --name pdf-demo-redis -p 127.0.0.1:6379:6379 -v pdf-demo-redis:/data redis:7 redis-server --appendonly yes --maxmemory-policy noeviction
+    subgraph API["API 容器 · NestJS"]
+        Controller["BatchesController<br/>参数校验与查询"]
+        BatchService["BatchesService<br/>批次拆分与幂等"]
+        Producer["RenderQueueService<br/>BullMQ Producer"]
+        Controller --> BatchService --> Producer
+    end
+
+    subgraph Infra["基础设施"]
+        PG[("PostgreSQL<br/>批次与任务状态")]
+        Redis[("Redis / BullMQ<br/>任务队列与重试")]
+        Volume[("PDF Volume<br/>/data/pdfs")]
+    end
+
+    subgraph Worker["Worker 容器"]
+        BullWorker["BullMQ Worker<br/>concurrency = N"]
+        Pool["RenderExecutorPool<br/>固定大小进程池"]
+        E1["Executor 1"] --> C1["Chromium 1"]
+        E2["Executor 2"] --> C2["Chromium 2"]
+        E3["Executor 3"] --> C3["Chromium 3"]
+        BullWorker --> Pool
+        Pool --> E1
+        Pool --> E2
+        Pool --> E3
+    end
+
+    Client -->|"POST /batches"| Controller
+    BatchService -->|"保存批次与任务"| PG
+    Producer -->|"固定 jobId 入队"| Redis
+    Redis -->|"按并发领取 Job"| BullWorker
+    BullWorker -->|"更新任务状态"| PG
+    C1 --> Volume
+    C2 --> Volume
+    C3 --> Volume
 ```
 
-沿用前文的固定试卷模板：`http://127.0.0.1:3000/print/exam`。模板服务需单独运行，根据 `examPageId`、`type` 加载数据，完成字体、图片、公式等渲染后设置 `window.__PDF_RENDER_READY__ = true`。示例 API 使用 3001 端口。
+### 任务执行时序
 
-### 1. 共享队列配置：queue-config.cjs
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as NestJS API
+    participant P as PostgreSQL
+    participant Q as BullMQ / Redis
+    participant W as Worker Supervisor
+    participant E as Executor 子进程
+    participant B as Chromium
 
-```js
-// queue-config.cjs
-module.exports = {
-  queueName: 'pdf-render',
-  connection: {
-    host: process.env.REDIS_HOST ?? '127.0.0.1',
-    port: Number(process.env.REDIS_PORT ?? 6379),
-  },
-};
+    C->>A: 创建批次
+    A->>P: 写入 Batch 与 Tasks
+    A->>Q: addBulk，jobId = taskId
+    A-->>C: 返回 batchId
+    Q->>W: 分发 Job
+    W->>P: task = active
+    W->>E: IPC 发送 render
+    E->>B: 创建 BrowserContext 与 Page
+    B->>B: 等待字体、图片、公式就绪
+    B-->>E: 生成 PDF
+    E->>E: 关闭 BrowserContext
+    E-->>W: 返回耗时、大小、阶段指标
+    W->>P: completed / failed / retrying
+    C->>A: 查询批次
+    A-->>C: 返回状态与 PDF 路径
 ```
 
-### 2. API：入队后立即返回，按 jobIds 查询批次
+## 分层设计
 
-```js
-// api.cjs
-const express = require('express');
-const { randomUUID } = require('node:crypto');
-const { Queue } = require('bullmq');
-const { queueName, connection } = require('./queue-config.cjs');
+### 1. API 层
 
-const queue = new Queue(queueName, {
-  connection: {
-    ...connection,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-  },
-  defaultJobOptions: {
-    attempts: 3, // 首次执行 + 最多 2 次失败重试
-    backoff: { type: 'exponential', delay: 2000 },
-    removeOnComplete: false, // 演示保留结果供查询
-    removeOnFail: false,
-  },
+负责参数校验、批次幂等、任务拆分、状态查询和 PDF 下载，不参与 Chromium 渲染。
+
+`clientRequestId` 在 PostgreSQL 中具有唯一约束。当调用方因网络超时重复提交时，API 返回已有批次，避免重复创建整批任务。
+
+```ts
+// src/batches/batches.service.ts（关键逻辑）
+const existing = await batches.findOne({
+  where: { clientRequestId: dto.clientRequestId },
 });
-queue.on('error', (error) => console.error('queue error', error));
+if (existing) return get(existing.id);
 
-const app = express();
-app.use(express.json({ limit: '100kb' }));
+const createdTasks = await tasks.save(createTasks(dto));
+await queue.addBulk(createdTasks.map((task) => ({
+  id: task.id,
+  data: { taskId: task.id, batchId: batch.id, ...task.payload },
+})));
+```
 
-app.post('/pdf/batch', async (req, res) => {
-  const tasks = req.body?.tasks;
-  if (!Array.isArray(tasks) || tasks.length < 1 || tasks.length > 100 ||
-      tasks.some((t) => !t || typeof t.examPageId !== 'string' ||
-        !/^[a-zA-Z0-9_-]{1,64}$/.test(t.examPageId) ||
-        !Number.isInteger(t.type) || t.type < 0 || t.type > 10)) {
-    return res.status(400).json({ error: '需要 1~100 个有效试卷任务' });
-  }
+### 2. 数据层
 
-  const batchId = randomUUID();
-  // addBulk 是一次批量入队；每个元素仍是独立 job。
-  const jobs = await queue.addBulk(tasks.map((task, index) => ({
-    name: 'render-exam',
-    data: { batchId, examPageId: task.examPageId, type: task.type },
-    opts: { jobId: `${batchId}-${index + 1}` },
-  })));
+PostgreSQL 是业务状态真相源，保存两类实体：
 
-  res.status(202).json({ batchId, jobIds: jobs.map((job) => job.id) });
-});
+- `render_batches`：批次状态、任务总数、成功数、失败数、原始请求；
+- `render_tasks`：任务状态、尝试次数、错误码、各阶段耗时、PDF 路径和大小。
 
-// 客户端保存入队返回的 jobIds，轮询这个只读查询接口。
-app.post('/pdf/status', async (req, res) => {
-  const ids = req.body?.jobIds;
-  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 100 ||
-      ids.some((id) => typeof id !== 'string' ||
-        !/^[a-f0-9-]{36}-\d{1,3}$/.test(id)) ||
-      new Set(ids).size !== ids.length) {
-    return res.status(400).json({ error: 'jobIds 格式错误' });
-  }
+任务状态机：
 
-  const results = await Promise.all(ids.map(async (id) => {
-    const job = await queue.getJob(id);
-    if (!job) return { jobId: id, state: 'missing' };
-    const state = await job.getState();
-    // 再取一次记录，减少状态切换期间拿到旧 returnvalue 的情况。
-    const latest = await queue.getJob(id);
-    if (!latest) return { jobId: id, state: 'missing' };
-    return {
-      jobId: id,
-      state,
-      result: state === 'completed' ? latest.returnvalue : null,
-      error: state === 'failed' ? latest.failedReason : null,
-    };
-  }));
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> queued
+    pending --> enqueue_failed
+    queued --> active
+    active --> completed
+    active --> retrying
+    retrying --> active
+    active --> failed
+    completed --> [*]
+    failed --> [*]
+    enqueue_failed --> [*]
+```
 
-  const successCount = results.filter((r) => r.state === 'completed').length;
-  const failedCount = results.filter((r) => r.state === 'failed').length;
-  res.json({
-    total: results.length,
-    successCount,
-    failedCount,
-    done: results.every((r) => ['completed', 'failed'].includes(r.state)),
-    results,
+### 3. 队列层
+
+BullMQ 负责削峰、有限重试、指数退避和 stalled job 恢复。数据库任务主键同时作为 BullMQ `jobId`，结合固定 PDF 输出路径形成幂等边界。
+
+```ts
+// src/batches/render-queue.service.ts（关键逻辑）
+defaultJobOptions: {
+  attempts: 2,
+  backoff: { type: 'exponential', delay: 2_000 },
+  removeOnComplete: { age: 86_400, count: 5_000 },
+  removeOnFail: { age: 604_800, count: 10_000 },
+}
+
+await queue.addBulk(tasks.map(({ id, data }) => ({
+  name: 'render-pdf',
+  data,
+  opts: { jobId: id },
+})));
+```
+
+BullMQ 提供的是 at-least-once 语义，因此业务上不能假设任务永远只执行一次。
+
+### 4. Worker 调度层
+
+BullMQ Worker 只负责维护队列锁、更新状态和调度任务，不在父进程中直接运行 Puppeteer。`WORKER_CONCURRENCY` 同时决定 BullMQ 并发数和 executor 池大小，避免队列并发与实际浏览器容量不一致。
+
+```ts
+const concurrency = envInt('WORKER_CONCURRENCY', 1);
+const pool = new RenderExecutorPool(concurrency);
+
+const worker = new Worker(queueName(), async (job) => {
+  await taskRepository.update(job.data.taskId, { status: 'active' });
+  const result = await pool.execute(job.data);
+  await taskRepository.update(job.data.taskId, {
+    status: 'completed',
+    resultPath: result.outputPath,
+    durationMs: result.durationMs,
+    stageDurations: result.stages,
   });
-});
-
-// Express 5 会把 async handler 的异常交给此中间件。
-app.use((error, req, res, next) => {
-  console.error(error);
-  res.status(error.status ?? 503).json({ error: '请求失败，请稍后查询或重试' });
-});
-
-queue.waitUntilReady().then(() => {
-  const server = app.listen(3001, '127.0.0.1');
-  let stopping = false;
-  const stop = () => {
-    if (stopping) return;
-    stopping = true;
-    server.close(() => {
-      queue.close().then(() => process.exit(0), () => process.exit(1));
-    });
-  };
-  process.on('SIGTERM', stop);
-  process.on('SIGINT', stop);
-}).catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+}, { concurrency, lockDuration: 120_000 });
 ```
 
-查询结果是轮询快照，任务可能在查询过程中完成，下次查询会更新。`delayed` 可能表示正在等待重试，不能把它当作最终失败；`missing` 表示任务不存在或已清理，不能当作完成。
+### 5. Executor 进程池
 
-本例用客户端持有的 `jobIds` 汇总批次，没有依赖 API 内存 Map。生产系统应把批次、所属用户、jobId 和结果写入数据库，支持刷新后查询，并在状态/下载接口校验用户权限。当前每次 POST 都创建新批次，HTTP 重复提交会重复打印；需要业务幂等键及持久化记录处理响应丢失后的重试。
+每个 slot 使用 `child_process.fork()` 创建独立 Node.js 子进程，并由该子进程管理一个 Chromium。单任务卡死、浏览器崩溃或 native 内存异常时，可以回收整个进程树，而不是只让 Promise 超时。
 
-### 3. Worker：领取、打印、返回结果
+```ts
+// src/worker/render-pool.ts（关键逻辑）
+const child = fork(executorPath, [], {
+  stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+  detached: true,
+  env: process.env,
+});
+
+const timer = setTimeout(() => {
+  reject(new RenderPoolError('RENDER_HARD_TIMEOUT', 'Render timed out'));
+  process.kill(-child.pid!, 'SIGTERM');
+  setTimeout(() => process.kill(-child.pid!, 'SIGKILL'), 3_000);
+}, hardTimeoutMs);
+```
+
+Executor 在以下情况自动回收并重建：
+
+- 渲染硬超时；
+- Chromium 断开或异常退出；
+- executor 自身崩溃；
+- 单个 executor 完成 `MAX_TASKS_PER_EXECUTOR` 个任务；
+- 渲染返回不可恢复异常。
+
+### 6. Chromium 渲染层
+
+Executor 复用 Browser，降低每个任务重新启动 Chromium 的成本；每个任务创建独立 `BrowserContext` 和 `Page`，在 `finally` 中关闭上下文，避免 Cookie、缓存、页面对象和异常状态跨任务污染。
+
+```ts
+const context = await browser.createBrowserContext();
+const page = await context.newPage();
+
+try {
+  await page.setContent(html, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() =>
+    document.documentElement.dataset.renderReady === 'true' &&
+    Boolean(window.__PRINT_READY__),
+  );
+  await page.pdf({ path, format: 'A4', printBackground: true });
+} finally {
+  await context.close();
+}
+```
+
+页面模板不使用固定 `sleep`，而是等待字体、图片和公式全部完成：
 
 ```js
-// worker.cjs
-const { Worker } = require('bullmq');
-const puppeteer = require('puppeteer');
-const fs = require('node:fs/promises');
-const path = require('node:path');
-const { randomUUID } = require('node:crypto');
-const { queueName, connection } = require('./queue-config.cjs');
-
-const outputDir = path.resolve(process.env.PDF_OUTPUT_DIR ?? './output');
-const templateUrl = process.env.PRINT_TEMPLATE_URL ??
-  'http://127.0.0.1:3000/print/exam';
-
-// 模块变量只属于当前 Worker 进程，4 个进程各自维护一个 Browser。
-let browser = null;
-let browserTaskCount = 0;
-const MAX_TASKS_PER_BROWSER = 100;
-
-async function withDeadline(operation, ms, message) {
-  let timer;
-  try {
-    return await Promise.race([
-      operation,
-      new Promise((resolve, reject) => {
-        timer = setTimeout(() => reject(new Error(message)), ms);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function closeBrowser() {
-  const current = browser;
-  if (!current) return;
-  try {
-    await withDeadline(current.close(), 5000, 'browser close timeout');
-  } catch (error) {
-    console.error('force close browser', error);
-    const child = current.process();
-    // 无法确认旧浏览器已退出，就退出 Worker，交给容器清理整个进程树。
-    if (!child) process.exit(1);
-    if (child.exitCode === null && child.signalCode === null) {
-      const exited = new Promise((resolve) => child.once('exit', resolve));
-      try {
-        child.kill('SIGKILL');
-        await withDeadline(exited, 5000, 'browser kill timeout');
-      } catch (killError) {
-        console.error(killError);
-        process.exit(1);
-      }
-    }
-  }
-  browser = null;
-  browserTaskCount = 0;
-}
-
-async function getBrowser() {
-  // concurrency: 1，当前进程不会有两个 job 同时初始化浏览器。
-  if (browser && !browser.connected) await closeBrowser();
-  if (!browser) {
-    browser = await puppeteer.launch({ headless: true, timeout: 20_000 });
-  }
-  return browser;
-}
-
-const worker = new Worker(queueName, async (job) => {
-  const { batchId, examPageId, type } = job.data;
-  const url = new URL(templateUrl);
-  url.searchParams.set('examPageId', examPageId);
-  url.searchParams.set('type', String(type));
-
-  await fs.mkdir(outputDir, { recursive: true });
-  // 由服务端生成 jobId，重试使用相同目标文件；临时文件区分执行尝试。
-  const outputPath = path.join(outputDir, `${job.id}.pdf`);
-  const tempPath = path.join(outputDir, `${job.id}-${randomUUID()}.tmp`);
-  let context;
-  let recycle = false;
-  try {
-    const currentBrowser = await getBrowser();
-    // 每份试卷使用独立会话，隔离 Cookie/localStorage 等数据。
-    context = await currentBrowser.createBrowserContext();
-    const page = await context.newPage();
-    await page.goto(url.toString(), {
-      waitUntil: 'domcontentloaded', timeout: 20_000,
-    });
-    await page.waitForFunction(() => window.__PDF_RENDER_READY__ === true, {
-      timeout: 30_000,
-    });
-    await page.pdf({
-      path: tempPath,
-      format: 'A4',
-      printBackground: true,
-      preferCSSPageSize: true,
-      timeout: 30_000,
-    });
-    await fs.rename(tempPath, outputPath);
-    console.log(`pid=${process.pid}, completed job=${job.id}`);
-    // resolve → BullMQ 保存 returnvalue 并将 job 标为 completed。
-    return { batchId, examPageId, type, outputPath };
-  } catch (error) {
-    // 示例保守处理：打印异常后回收浏览器，让下一次尝试使用新实例。
-    recycle = true;
-    throw error;
-  } finally {
-    await fs.rm(tempPath, { force: true }).catch(() => {});
-    if (context) {
-      try {
-        // 正常任务只关闭自己的 Context（连同内部 Page），保留 Browser。
-        await withDeadline(context.close(), 5000, 'context close timeout');
-      } catch (error) {
-        console.error('context cleanup failed', error);
-        recycle = true;
-      }
-    }
-    browserTaskCount += 1;
-    if (recycle || (browser && !browser.connected) ||
-        browserTaskCount >= MAX_TASKS_PER_BROWSER) {
-      // 当前任务结束后再回收；下一份任务会按需启动新 Browser。
-      await closeBrowser();
-    }
-  }
-  // 异常向上抛出 → BullMQ 按 attempts/backoff 重试，耗尽后 failed。
-}, {
-  connection: { ...connection, maxRetriesPerRequest: null },
-  concurrency: 1,
+Promise.all([
+  document.fonts.ready,
+  ...Array.from(document.images).map((image) =>
+    image.complete
+      ? Promise.resolve()
+      : new Promise((resolve, reject) => {
+          image.addEventListener('load', resolve, { once: true });
+          image.addEventListener('error', reject, { once: true });
+        }),
+  ),
+]).then(() => {
+  window.__PRINT_READY__ = true;
+  document.documentElement.dataset.renderReady = 'true';
 });
-
-worker.on('error', (error) => console.error('worker error', error));
-worker.on('failed', (job, error) => {
-  // 单次尝试失败也可能触发，不代表已耗尽全部重试。
-  console.error(`attempt failed: ${job?.id}`, error.message);
-});
-
-let stopping = false;
-async function stop() {
-  if (stopping) return;
-  stopping = true;
-  await worker.close(); // 停止领取，等待当前 job 完成。
-  await closeBrowser(); // 当前任务结束后再关闭进程持有的 Browser。
-}
-process.on('SIGTERM', () => stop().catch(console.error));
-process.on('SIGINT', () => stop().catch(console.error));
 ```
 
-启动 API，再在 **4 个独立终端**各运行一次 `node worker.cjs`，就是 4 个 Worker 进程。每个进程首次处理任务时启动自己的 Browser，后续任务复用；每个任务独立创建并关闭 Context。正常完成时不会关闭 Browser，因此仍是 **4 个 Worker × 并发 1 = 最多同时打印 4 份**，同时省去每份 PDF 启动浏览器的开销。
+## 为什么不使用 PM2
 
-例如进程 C 完成任务 3 后，关闭任务 3 的 Context，继续用 Browser C 创建任务 5 的 Context。其他进程的任务不受影响。每个 Browser 累计处理 100 次任务尝试后回收；打印异常、Context 清理失败、浏览器断连或 Worker 优雅停机时也会关闭浏览器。100 是演示阈值，实际应结合内存监控和压测调整。
+本项目采用容器化进程模型：API 与 Worker 运行在不同容器；BullMQ 负责排队、重试和 stalled job 恢复；Worker Supervisor 负责 executor 子进程拉起与回收；Docker restart policy 负责容器主进程异常后的重新启动。
 
-`withDeadline()` 只限制等待时间，本身不会终止操作。因此 Context 清理超时后必须回收 Browser，Browser 关闭超时后必须终止浏览器进程；无法确认终止时退出 Worker，由部署层清理进程树并重启，而不是继续在旧浏览器仍运行的情况下领取下一份任务。生产部署仍需配置容器/进程组清理及停机期限。
+容器内再运行 PM2 会产生双重守护，增加 PID 1、信号转发、优雅退出、日志和内存统计的解释成本。PM2 可以管理进程，但不能替代 Redis 持久队列、任务状态和重试语义。
 
-参考：[独立 BrowserContext](https://pptr.dev/api/puppeteer.browser.createbrowsercontext)、[关闭 Context 及其页面](https://pptr.dev/api/puppeteer.browsercontext.close)。
+## Docker Compose 服务
+
+Compose 只保留四个运行时必要服务：
+
+- `api`：NestJS HTTP API；
+- `worker`：BullMQ Consumer、executor 子进程池和 Chromium；
+- `postgres`：批次和任务状态；
+- `redis`：BullMQ 队列、锁和重试数据。
+
+没有额外运行 Prometheus、Grafana 或 exporter。压测脚本直接读取 Docker 与 cgroup 指标，降低本地示例的运行成本。
+
+### 4C8G 资源边界
+
+```text
+Worker:     3 CPU / 4200MB / 1GB shm / 384 PIDs
+API:        0.4 CPU / 512MB
+PostgreSQL: 0.4 CPU / 768MB
+Redis:      0.1 CPU / 256MB
+```
+
+这些限制用于建立故障边界，而不是保证永远不发生异常：
+
+- CPU 超限：触发 cgroup throttling，延迟上升但通常不会杀进程；
+- 内存超限：可能触发容器级 OOM，进程退出码通常为 137；
+- `/dev/shm` 耗尽：可能导致 Chromium 页面崩溃或 `Target closed`；
+- PIDs 达到上限：新的进程或线程创建失败。
+
+总 CPU 限额为 3.9 核，容器内存限额合计约 5.7GB，其余资源留给 Linux/Docker 内核、页缓存、网络缓冲区和瞬时峰值。
+
+## 项目目录
+
+```text
+pdf-render-service/
+├── assets/                         # heavy试卷HTML、公式和图片资源
+├── docs/system-architecture.mmd   # Mermaid架构源文件
+├── reports/                       # 汇总报告；逐轮报告默认忽略
+├── scripts/load-test.mjs          # 压测、Docker与cgroup采样
+├── src/
+│   ├── batches/                   # API、批次服务和BullMQ Producer
+│   ├── common/                    # 环境配置与共享类型
+│   ├── database/                  # 实体、迁移和数据源
+│   └── worker/                    # Worker、进程池、Executor和模板
+├── docker-compose.yml
+├── Dockerfile
+├── .env.2c4g
+├── .env.4c8g
+└── 压测.md
+```
+
+## 快速开始
+
+### 环境要求
+
+- Docker Desktop 或 Docker Engine 24+
+- Docker Compose v2
+- 本地开发时需要 Node.js 22、pnpm 10
+
+### 2C4G 配置启动
 
 ```bash
-# API 终端
-node api.cjs
-
-# 其他四个终端，每个执行一次
-node worker.cjs
+git clone https://github.com/hxh-ly/pdf-render-service.git
+cd pdf-render-service
+docker compose --env-file .env.2c4g up -d --build
 ```
 
-提交两份作为演示，将 tasks 扩展到 20 个即可验证并发排队：
+### 4C8G 配置启动
 
 ```bash
-curl -X POST http://127.0.0.1:3001/pdf/batch \
-  -H 'Content-Type: application/json' \
-  -d '{"tasks":[{"examPageId":"10001","type":3},{"examPageId":"10002","type":3}]}'
-
-# 将返回的真实 jobIds 放入查询请求中
-curl -X POST http://127.0.0.1:3001/pdf/status \
-  -H 'Content-Type: application/json' \
-  -d '{"jobIds":["替换为返回的第一个jobId","替换为返回的第二个jobId"]}'
+docker compose --env-file .env.4c8g up -d --build
+docker compose --env-file .env.4c8g ps
 ```
 
-### 与原进程池的边界、上线时需要补齐的部分
+服务启动后可访问：
 
-- **API 不再管理 Worker 的 busy 状态。** Worker 从 Redis 领取任务，处理函数返回值代表成功，抛出 Error 代表失败。不要 catch 后返回 `{ success: false }`，那会被当作正常完成。
-- **不要在 active job 内长时间等待本地队列。** 本例没有本地二级队列。如果保留进程池，Worker 并发不要无意义地超过可执行容量。
-- **重试可能重复执行。** 固定 jobId 的目标文件减少重复文件，但这不等于严格 exactly-once；多个尝试重叠、业务数据改变、重复提交仍需版本化数据和业务幂等控制。
-- **本例是同机文件输出。** `outputPath` 是 Worker 本机路径，不是下载 URL。多机时上传 OSS/S3，在上传完成后返回对象 key；API 鉴权后提供签名下载链接。Redis 只存参数和结果引用，不存整份 PDF。
-- **浏览器超时与队列锁是两件事。** 上面的 timeout 分别约束启动、导航、等待页面和打印，不是整个 job 的硬超时。`lockDuration` 也不是任务超时。整任务硬超时仍应使用可终止的隔离进程/容器并清理 Chromium 进程树，不能只用 Promise.race 提前返回就允许重试与旧渲染重叠。
-- **进程故障由部署层拉起。** systemd、PM2 或容器负责重启退出的 Worker；BullMQ 负责 stalled 检测和任务恢复。优雅停机要留足当前打印的完成时间。
-- **结果要有保留策略。** 本例关闭自动删除以便学习查询；生产环境应先持久化业务结果，再设置完成/失败 job 的 age/count 和文件清理策略，避免无限占用 Redis/磁盘。
-- **模板鉴权独立处理。** 固定模板需登录时，Worker 使用服务端签发的短期凭证；不要允许用户提交任意 URL，也不要把长期登录凭证写入 Redis job。
+- 健康检查：`http://localhost:3000/health`
+- 队列状态：`http://localhost:3000/queue`
 
-若还需要把 Node.js 中 CPU 密集计算与队列续锁隔离，可使用 BullMQ 的 sandboxed processor：把处理函数放在独立文件并将文件路径传给 Worker。它与普通 `async job => ...` 的进程模型不同，不应把 `concurrency: 4` 本身理解成自动启动四个子进程。[Sandboxed processors](https://docs.bullmq.io/guide/workers/sandboxed-processors)
+查看日志和资源：
 
-参考：[批量入队](https://docs.bullmq.io/guide/queues/adding-bulks)、[连接配置](https://docs.bullmq.io/guide/connections)、[失败重试](https://docs.bullmq.io/guide/retrying-failing-jobs)、[stalled 恢复](https://docs.bullmq.io/guide/workers/stalled-jobs)、[PDF 超时选项](https://pptr.dev/api/puppeteer.pdfoptions)。
+```bash
+docker compose logs -f api worker
+docker stats
+```
+
+停止容器但保留数据库、Redis 和 PDF volume：
+
+```bash
+docker compose down
+```
+
+`docker compose down -v` 会删除数据库、队列和 PDF 数据卷，只应在确定不需要数据时执行。
+
+## API 使用
+
+### 创建批次
+
+```bash
+curl -sS -X POST http://localhost:3000/batches \
+  -H 'content-type: application/json' \
+  -d '{
+    "clientRequestId": "interview-demo-001",
+    "taskCount": 20,
+    "title": "九年级数学综合测试",
+    "difficulty": "medium"
+  }'
+```
+
+### 查询批次
+
+```bash
+curl -sS http://localhost:3000/batches/<batchId>
+```
+
+返回内容包含批次状态、各状态任务数量、任务耗时、尝试次数、错误码、PDF 大小和结果路径。
+
+### 下载 PDF
+
+```text
+http://localhost:3000/files/<taskId>.pdf
+```
+
+## Heavy 模板
+
+Heavy 模板来源于完整数学试题的 HTML 导出，包含：
+
+- 61 页 A4 输出；
+- 300 余个公式和插图资源；
+- 中文字体、图片和长文档分页；
+- 额外 96 个 KaTeX 公式 DOM；
+- 所有本地图片转换为 Data URI，避免外部网络影响压测；
+- 字体、图片和公式全部就绪后才允许打印。
+
+运行 20 个 heavy 任务：
+
+```bash
+pnpm install
+pnpm load:test -- \
+  --count 20 \
+  --difficulty heavy \
+  --title "广东省深圳市深圳实验学校2025-2026学年七年级下学期期末考试数学试题" \
+  --timeout 600
+```
+
+## 压测方法
+
+### 阶梯测试
+
+在相同 heavy 模板、任务数和 Docker 配额下，仅改变 Worker 并发：
+
+```bash
+WORKER_CONCURRENCY=1 docker compose --env-file .env.4c8g up -d --no-deps --force-recreate worker
+pnpm load:test -- --count 20 --difficulty heavy --timeout 600
+
+# 将并发依次调整为2、3、4，每档重新创建Worker并重复测试。
+```
+
+每一档记录成功率、墙钟时间、jobs/min、p50/p95/p99、各容器 CPU/内存/PIDs、Worker cgroup CPU/内存事件，以及容器退出码和 `OOMKilled`。
+
+### 阶梯压测结果
+
+| 并发 | 成功率 | 墙钟时间 | 吞吐 | p50 | p95 | cgroup内存峰值 | PIDs峰值 | CPU throttled |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 100% | 85.37s | 14.06 jobs/min | 3.96s | 4.37s | 973MiB | 94 | 0.83s |
+| 2 | 100% | 59.07s | 20.31 jobs/min | 4.80s | 6.74s | 1699MiB | 171 | 8.61s |
+| 3 | 100% | 46.78s | 25.65 jobs/min | 5.74s | 8.36s | 2472MiB | 252 | 26.05s |
+| 4 | 100% | 52.41s | 22.90 jobs/min | 9.02s | 10.62s | 3470MiB | 333 | 86.14s |
+
+并发 2 相对并发 1 吞吐提高约 44.5%；并发 3 相对并发 2 再提高约 26.3%。并发 4 相对并发 3 吞吐下降约 10.7%，同时 p95、内存和 CPU throttling 显著增加，因此不应继续增加单 Worker 并发。
+
+### 持续验证结果
+
+候选并发确定为 3 后，执行 60 个 heavy 任务：
+
+```text
+成功率                 100%（60/60）
+批次墙钟时间           124.27s
+吞吐                   28.97 jobs/min
+p50 / p95 / max        5.81s / 6.44s / 6.62s
+Docker内存峰值         2387MiB
+cgroup内存峰值         2732MiB
+PIDs峰值               257 / 384
+memory.events.max      0
+memory.events.oom      0
+memory.events.oom_kill 0
+容器OOMKilled          false
+```
+
+20 任务和 60 任务的吞吐存在差异，主要来自 Browser 启动、容器预热、批次创建和轮询等固定成本；容量评估优先采用更长时间、更多任务的稳定阶段数据。
+
+## 容量评估
+
+并发选择同时受内存、CPU 和业务延迟约束：
+
+```text
+C_mem = floor((Worker内存上限 × 0.70 - Worker基线内存) / 单任务增量内存p95)
+
+C_final = min(
+  C_mem,
+  CPU未进入吞吐下降区的并发,
+  p95满足业务SLO的并发
+)
+```
+
+本次结果确认：
+
+- 4C8G、单 Worker 推荐 `WORKER_CONCURRENCY=3`；
+- 若业务要求 p95 必须低于 7 秒，可选择并发 2；
+- 若优先考虑整批吞吐，并允许约 8 秒 p95，则选择并发 3；
+- 实测峰值吞吐为 28.97 jobs/min；
+- 按 70% 目标利用率，安全容量基线约为 20 jobs/min、约 1200 jobs/hour；
+- 峰值到达率长期高于安全容量时，BullMQ waiting 队列会持续增长，应增加 Worker 实例，而不是继续提高单 Worker 并发。
+
+这里的“安全容量”是基于现有 60 任务测试的工程基线，不应包装成生产 SLA。正式容量确认还需要真实 Linux 4C8G、业务模板分布、网络资源源和 30～60 分钟持续测试。
+
+## 压测报告
+
+每次执行 `pnpm load:test` 会在 `reports/` 生成：
+
+- JSON：完整汇总、任务明细、Docker 采样、cgroup 和 OOM 数据；
+- CSV：逐任务状态、尝试次数、耗时、PDF 大小和错误码；
+- Markdown：便于复盘和归档的可读报告。
+
+压测脚本读取的数据来源：
+
+```text
+docker stats                CPU、容器内存、内存比例、PIDs
+docker inspect              状态、退出码、OOMKilled
+/sys/fs/cgroup/cpu.stat     CPU使用量与throttling
+/sys/fs/cgroup/memory.peak  内存历史峰值
+/sys/fs/cgroup/memory.events max、oom、oom_kill
+```
+
+## 故障注入
+
+支持以下故障：
+
+- `render_timeout`：任务永不返回，验证父 Worker 的硬超时和进程树回收；
+- `formula_not_ready`：不设置页面就绪标记，验证资源等待超时；
+- `browser_crash`：主动杀死 Chromium；
+- `executor_crash`：executor 子进程直接退出；
+- `heavy_memory`：分配额外 native Buffer，观察 cgroup 和 RSS 变化。
+
+示例：每 5 个任务注入一次公式就绪超时。
+
+```bash
+pnpm load:test -- \
+  --count 20 \
+  --difficulty medium \
+  --fault formula_not_ready \
+  --fault-every 5 \
+  --timeout 600
+```
+
+故障测试应确认任务能够记录明确错误码、执行有限次数重试、回收异常 executor，并继续处理后续正常任务。
+
+## OOM 判断
+
+```bash
+docker inspect pdf-render-worker-1 \
+  --format '{{.State.ExitCode}} OOMKilled={{.State.OOMKilled}}'
+
+docker exec pdf-render-worker-1 cat /sys/fs/cgroup/memory.events
+```
+
+- `JavaScript heap out of memory`：通常是 Node.js V8 heap 限制；
+- `OOMKilled=true`、退出码 137、`oom_kill` 增长：容器 cgroup 或内核 OOM；
+- Chromium 退出但 Worker 仍然存活：更可能是浏览器崩溃、shm/PIDs 问题或 executor 主动回收；
+- `--max-old-space-size` 只限制 V8 old space，无法限制 Chromium、多进程 RSS、Buffer、共享内存和页缓存。
+
+因此“设置进程内存限制后仍然 OOM”并不矛盾。内存限制建立的是容器故障边界，而不是让超额内存继续可用。
+
+## 本地开发验证
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm test
+pnpm build
+docker compose config --quiet
+```
+
+当前自动测试覆盖模板生成、页面就绪标记和 HTML 安全转义。部署前还应执行 Docker 构建、健康检查、heavy smoke test 和故障注入。
+
+## 简历描述参考
+
+> 基于 4C8G 容器配额，对 61 页复杂数学试卷进行并发 1～4 阶梯压测，结合吞吐、p95 延迟、CPU throttling、内存峰值、PIDs 和 OOM 指标确定最优并发为 3；60 个重型任务压测成功率 100%，吞吐 28.97 jobs/min、p95 6.44 秒，无 OOM，并形成约 20 jobs/min 的安全容量基线。
+
+## 后续改进
+
+- 在真实 Linux 4C8G 环境执行 30～60 分钟持续压测；
+- 为 Redis 设置低于容器限制的 `maxmemory`，为 AOF rewrite 和内存碎片保留空间；
+- 接入生产监控或日志平台，长期观测队列深度、错误码、p95/p99 和 executor 重启次数；
+- 根据业务规模接入对象存储，避免多 Worker 节点依赖本地共享 volume；
+- 增加任务取消、优先级队列、租户配额和结果清理策略。
