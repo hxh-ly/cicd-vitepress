@@ -127,6 +127,18 @@ const AiConfig = [
     link: "ai/interview",
   },
   {
+    text:'cordis',
+    link:'ai/cordis'
+  },
+  {
+    text:'deepseek harness',
+    link:'ai/dsh'
+  },
+  {
+    text:'tool',
+    link:'ai/tool'
+  },
+  {
     text: "RAG",
     link: "ai/rag",
   },

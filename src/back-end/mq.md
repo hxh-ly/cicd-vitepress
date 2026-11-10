@@ -1,6 +1,45 @@
 # 消息队列
 
-1. RabbitMQ：业务任务队列（AMQP协议），Broker做路由推送，擅长人物解构，复杂路由、死信、延迟任务，**Push推送模型** 消费ACK后消息默认删除。
+1. RabbitMQ：业务任务队列（AMQP协议），Broker做路由推送，擅长任务解构，复杂路由、死信、延迟任务，**Push推送模型** 消费ACK后消息默认删除。
+
+|对象|	作用|	绑定对象|
+|---|---|---|
+|Connection|	TCP 连接载体|	包含多个 Channel|
+|Channel|	AMQP 操作载体（发消息、声明交换机 / 队列、消费）|	隶属于 Connection|
+|Exchange|	消息路由|	绑定到 Queue|
+|Queue|	存储消息|	被 Consumer 订阅|
+|Consumer|	消费消息|	监听 Queue|
+
+|类型	|匹配依据|	匹配规则|	通配符|	性能|	常用程度	|典型场景|
+|---|---|---|---|---|---|---|
+|direct|	routingKey|	完全相等|	无|	高|	⭐⭐⭐⭐⭐|	精准单播、订单状态、支付回调、简单任务分发|
+|fanout|	忽略 routingKey|	全部绑定队列都收到|	无|	最高|	⭐⭐⭐⭐|	广播通知、配置刷新、缓存失效、多服务同时感知事件|
+|topic|	routingKey（.分段）|	模式匹配|	* 匹配一段；# 匹配0 或多段	|较高	|⭐⭐⭐⭐⭐	|日志分类、多维度事件、你上面 RAG 的多 routingKey 场景|
+|headers|	message headers 键值对|	x-match=all（全部匹配）/any（任意一个匹配）	|无|	差（map 遍历）|	⭐|	多条件、非字符串维度路由；业务很少用|
+
+```mermaid
+graph LR
+    subgraph Client[客户端]
+        P[Producer]
+        C[Consumer]
+    end
+    P --> Conn[Connection TCP]
+    C --> Conn
+    Conn --> Ch1[Channel 1]
+    Conn --> Ch2[Channel 2]
+
+    subgraph Broker[RabbitMQ Broker]
+        Ch1 --> E1[Exchange 1]
+        Ch2 --> E2[Exchange 2]
+        E1 -.Binding.-> Q1[Queue1]
+        E1 -.Binding.-> Q2[Queue2]
+        E2 -.Binding.-> Q2
+    end
+    Q1 --> C1[Consumer-1]
+    Q2 --> C2[Consumer-2]
+    Q2 --> C3[Consumer-3]
+```
+
 ```mermaid
 graph TD
     Producer[生产者 Producer] -->|发布消息| Exchange[Exchange 交换机<br/>Direct / Topic / Fanout]
@@ -19,7 +58,7 @@ graph TD
     note1[消息ACK后删除；broker push推送模型]
 ```
 
-2. Kafka：流式日志平台，磁盘顺序写，高吞吐，pull拉取模型。消息消费完依旧磁盘留存，可以回溯重放。不擅长复杂业务路由。
+1. Kafka：流式日志平台，磁盘顺序写，高吞吐，pull拉取模型。消息消费完依旧磁盘留存，可以回溯重放。不擅长复杂业务路由。
 
 ```mermaid
 graph LR
